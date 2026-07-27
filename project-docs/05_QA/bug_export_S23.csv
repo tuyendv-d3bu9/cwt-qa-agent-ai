@@ -1,0 +1,13 @@
+Issue key,Summary,Status,Priority,Component,Fix Version,Reporter,Created,Resolution
+BUG-1142,Tong tien lech 1d khi ap ma phan tram,In Progress,Major,Checkout,,Trang,2026-06-12,
+BUG-1150,Ap ma xong bam back roi vao lai van con giam gia,Open,Major,Checkout,,Nam,2026-06-18,
+BUG-1151,Thong bao loi hien "Voucher khong ton tai" khac design,Open,Minor,Checkout,,Trang,2026-06-18,
+BUG-1152,Nut Ap dung khong disable khi o nhap rong tren mobile,Closed,Minor,Checkout,S23,Nam,2026-06-19,Fixed
+BUG-1150,Ap ma xong bam back roi vao lai van con giam gia,,Major,Checkout,,Nam,2026-06-18,
+BUG-1163,Nhap ma chu thuong khong nhan,Closed,Major,Checkout,S23,Trang,2026-06-22,Fixed
+BUG-1170,Ma het han van ap duoc neu ap luc 00:30 sang,Open,Critical,Checkout,,Nam,2026-07-02,
+BUG-1171,Bot hang sau khi ap ma van giu nguyen giam gia,Open,,Checkout,,Nam,2026-07-03,
+BUG-1174,Hien thi 730.000 VND thay vi 730.000d,Open,Minor,Checkout,,Trang,2026-07-05,
+BUG-1180,Ap ma FREESHIP30 tru vao tien hang thay vi phi ship,Reopened,Major,Checkout,,Trang,2026-07-14,
+BUG-1181,Khong co thong bao khi ma het luot su dung,Open,Minor,Checkout,,Nam,2026-07-15,Not a bug - chua implement
+BUG-1174,Hien thi sai dinh dang tien te o khoi tong ket,Open,Minor,Checkout,,Trang,2026-07-05,
