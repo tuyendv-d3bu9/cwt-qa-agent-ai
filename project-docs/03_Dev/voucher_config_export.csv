@@ -1,0 +1,15 @@
+voucher_code,voucher_name,type,value,max_discount,min_order_value,expired_at,status,quota_total,quota_used,first_order_only,created_by,created_at,internal_note
+SALE10,Giam 10% toan san,PERCENT,10,,200000,2026-12-31,ACTIVE,,0,N,linh.mkt,2026-01-05,
+SALE20CAP,Sale he 20%,PERCENT,20,100000,500000,2026-08-31,ACTIVE,,0,N,linh.mkt,2026-05-20,tran giam 100k
+GIAM50K,Giam 50k,FIXED,50000,,300000,2026-09-30,ACTIVE,,0,N,linh.mkt,2026-05-20,
+GIAM100K,Giam 100k don to,FIXED,100000,50000,1000000,2026-09-30,ACTIVE,,0,N,linh.mkt,2026-06-01,sao FIXED lai co max_discount?
+FREESHIP30,Mien phi ship 30k,FREESHIP,30000,30000,0,31/08/2026,ACTIVE,,0,N,linh.mkt,2026-06-10,
+FREESHIP0,Mien phi ship toan bo,FREESHIP,,,250000,2026-08-31,ACTIVE,,0,N,linh.mkt,2026-06-10,value de trong = free toan bo?
+NEWBIE100,Khach moi giam 100k,FIXED,100000,,500000,2026-12-31,ACTIVE,,0,Y,linh.mkt,2026-06-25,
+BACK2SCHOOL,Back to school 15%,PERCENT,15,150000,300000,2026-08-20,ACTIVE,500,0,N,linh.mkt,2026-07-01,campaign 8/8
+QUOTA5,Test gioi han luot,PERCENT,25,200000,100000,2026-08-31,ACTIVE,5,5,N,son.dev,2026-06-28,tao de test
+TET2026,Tet 2026,PERCENT,30,300000,500000,2026-02-28,EXPIRED,,0,N,linh.mkt,2026-01-10,
+SALE10 ,Giam 10% toan san,PERCENT,10,,200000,2026-12-31,ACTIVE,,0,N,linh.mkt,2026-01-05,
+VIPONLY,Danh cho khach VIP,PERCENT,25,500000,0,2026-10-31,DRAFT,,0,N,linh.mkt,2026-07-05,chua co rule VIP trong he thong
+,Ma chua dat ten,FIXED,20000,,0,2026-08-31,INACTIVE,,0,N,son.dev,2026-07-08,row loi
+GIAM50K,Giam 50k - ban cu,FIXED,50000,,500000,2026-06-30,EXPIRED,,0,N,linh.mkt,2026-03-01,trung code voi dong tren
