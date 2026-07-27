@@ -1,20 +1,27 @@
-# Role: <Tên Node>
+# Role: <Role Name>
 
-## Trách nhiệm
-- 
-- 
-
-## KHÔNG làm
-- 
+## Mission
 - 
 
-## Skill được phép gọi (agents/<node>/skills/)
+## Responsibilities
+- 
 - 
 
-## Knowledge tham chiếu
-- Riêng (agents/<node>/knowledge/): 
-- Dùng chung (shared/knowledge/): 
+## Can
+- 
+- 
+
+## Can't
+- 
+- 
+
+## Allowed Skills (agents/<node>/skills/)
+- 
+
+## Knowledge Referenced
+- Private (agents/<node>/knowledge/): 
+- Shared (shared/knowledge/): 
 
 ## Input/Output contract
-- Input nhận từ (ai gọi, format gì): 
-- Output trả về (format gì):
+- Input received from (who calls, what format): 
+- Output returned (what format):
