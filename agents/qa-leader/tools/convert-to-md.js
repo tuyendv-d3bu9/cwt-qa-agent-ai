@@ -120,7 +120,8 @@ export async function convertFile(inputPath, outputDir = path.dirname(inputPath)
 /**
  * Traverse and convert all documents in the directory
  */
-export async function convertDirectory(dirPath, outputDir = dirPath) {
+export async function convertDirectory(dirPath, outputDir) {
+  outputDir ??= dirPath;
   const files = fs.readdirSync(dirPath);
   const results = [];
 

@@ -15,7 +15,7 @@ const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
 const FACT = await readFile(new URL("./knowledge/fact-framework.md", import.meta.url), "utf8");
 const CONVENTIONS = await readFile(new URL("./knowledge/task-management-conventions.md", import.meta.url), "utf8");
 const SKILLS_DIR = new URL("./skills/", import.meta.url);
-const FOLDERS = ["01_Bussiness", "02_BA", "03_DEV", "04_Dessign", "05_QA", "06_Communication"];
+const FOLDERS = ["01_Business", "02_BA", "03_Dev", "04_Design", "05_QA", "06_Communication"];
 const MAX_ROUNDS = 3;
 
 async function loadSkill(fileName) {
@@ -32,7 +32,7 @@ async function askLLM(skillText, userText, extraKnowledge = "") {
 
 // Step 1 (skill 01) — standardize formats, DO NOT use LLM (deterministic tool)
 async function step1_convert() {
-    return convertDirectory("project-docs", "project-docs");
+    return convertDirectory("project-docs");
 }
 
 // Step 2 (skill 02) — classify files still located at root project-docs/ into exactly one of the 6 folders
@@ -49,16 +49,25 @@ async function step2_classify() {
     }
     const raw = await askLLM(skill,
         `document_list=${JSON.stringify(unclassified.map(f => f.path))}\ndocument_contents=${JSON.stringify(contents)}\n` +
-        `Return only a JSON object in the format { "tenFile.md": "02_BA/tenFile.md", ... } — DO NOT write anything outside the JSON.`);
-    const mapping = JSON.parse(raw);
+        `Return ONLY a raw JSON object (no markdown, no code block) mapping source path -> destination path, e.g. { "project-docs/tenFile.md": "project-docs/02_BA/tenFile.md", ... }`);
+    const mapping = parseJSON(raw);
 
     const moved = [];
     for (const [from, to] of Object.entries(mapping)) {
-        await mkdir(path.dirname(to), { recursive: true });
-        await rename(from, to);
-        moved.push([from, to]);
+        // Normalize: strip any leading project-docs/ duplicates, then ensure exactly one prefix
+        const stripped = to.replace(/^(project-docs\/)+/, "");
+        const safeTo = `project-docs/${stripped}`;
+        await mkdir(path.dirname(safeTo), { recursive: true });
+        await rename(from, safeTo);
+        moved.push([from, safeTo]);
     }
     return { moved };
+}
+
+// Strip markdown code fences (```json ... ```) that LLM may wrap around JSON
+function parseJSON(raw) {
+    const cleaned = raw.replace(/^```[\w]*\n?/m, "").replace(/```\s*$/m, "").trim();
+    return JSON.parse(cleaned);
 }
 
 // Step 3 (skill 03) — cross-check, detect gaps/contradictions
@@ -67,8 +76,8 @@ async function step3_gapCheck() {
     const listing = await runTool("list_files", { dir: "project-docs" });
     const raw = await askLLM(skill,
         `classified_documents=${JSON.stringify(listing.files.map(f => f.path))}\n` +
-        `Tra ve dung 1 JSON object: {"hasGap": bool, "reportMarkdown": string} — reportMarkdown la Bao cao theo dung format skill da mo ta.`);
-    return JSON.parse(raw);
+        `Return ONLY a raw JSON object (no markdown, no code block): {"hasGap": bool, "reportMarkdown": string}`);
+    return parseJSON(raw);
 }
 
 // Human-Final stop point used for both initial gaps and intermediate ASK
@@ -95,7 +104,7 @@ async function step5_review(round) {
         `deliverable_content=${deliverable.content}\nround=${round}\n` +
         `Return only a JSON object: {"verdict": "PASS"|"FIX"|"ASK", "reportMarkdown": string}`,
         FACT + "\n\n" + CONVENTIONS);
-    return JSON.parse(raw);
+    return parseJSON(raw);
 }
 
 // Step 6 (skill 06) — track progress, called after each milestone

@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import { GoogleGenAI } from "@google/genai";
 import { getCache, setCache } from "./cache.js";
 
