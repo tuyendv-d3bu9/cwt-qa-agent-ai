@@ -3,6 +3,11 @@
 ## Purpose
 Dùng khi `.state/task-assignment.md` đã có thêm mục "## Feedback vòng N (FIX)" do QA Leader ghi vào (sau khi review theo FACT). Sửa đúng điểm được chỉ ra — **không viết lại toàn bộ deliverable từ đầu**.
 
+## Knowledge Reference
+- `knowledge/fact-framework.md` — FACT self-check (Section 2) + FIX Round rules (Section 6) + File Boundary (Section 5).
+- `knowledge/analysis-integrity.md` — source integrity và boundary sau khi sửa.
+- `knowledge/requirement-summary.md` — schema 7 phần chuẩn cần giữ nguyên khi trả về deliverable.
+
 ## Prompt Type
 Template-based
 
@@ -31,6 +36,10 @@ previous_deliverable = "... | Rule #3: Voucher hết hạn giữa checkout | ...
 ```
 
 ## Quality Check
-- Faithful: chỉ sửa đúng phạm vi feedback, không âm thầm đổi những phần đã PASS trước đó.
-- Accurate: điểm sửa phải giải quyết đúng vấn đề Leader nêu, không sửa sai chỗ.
-- Complete: trả về đủ cấu trúc deliverable, không cắt bớt phần không liên quan tới feedback.
+> Áp dụng FACT self-check từ `knowledge/fact-framework.md` (Section 2) sau khi sửa.
+> Tuân thủ FIX Round rules từ `knowledge/fact-framework.md` (Section 6).
+
+- **Faithful** (xem `knowledge/analysis-integrity.md`): chỉ sửa đúng phạm vi feedback, không âm thầm đổi những phần đã PASS trước đó.
+- **Accurate**: điểm sửa phải giải quyết đúng vấn đề Leader nêu, không sửa sai chỗ.
+- **Complete** (xem `knowledge/requirement-summary.md`): trả về đủ cấu trúc deliverable (Requirement Summary, Missing Rules, Viewpoints & Test Ideas, Assumptions, Open Questions), không cắt bớt phần không liên quan tới feedback.
+- **Testable** (xem `knowledge/fact-framework.md`): sau khi sửa, deliverable vẫn phải đầy đủ có thể kiểm chứng.

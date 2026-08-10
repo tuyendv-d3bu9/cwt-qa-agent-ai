@@ -1,7 +1,12 @@
 # Skill: Viewpoint & Test Idea Generator
 
 ## Purpose
-Dùng sau `02_missing_rule_finder.md` — chọn 4 viewpoint phù hợp nhất (từ 8 viewpoint trong `knowledge/requirement-analysis-conventions.md`) và sinh test idea cho mỗi viewpoint.
+Dùng sau `02_missing_rule_finder.md` — chọn viewpoint phù hợp nhất (từ 8 viewpoint trong `knowledge/viewpoint-library.md`) theo tiêu chí Business Impact × Likelihood × Detectability, sau đó sinh test idea cho mỗi viewpoint.
+
+## Knowledge Reference
+- `knowledge/viewpoint-library.md` — 8 viewpoint của QA và tiêu chí selection (Business Impact × Likelihood × Detectability).
+- `knowledge/analysis-integrity.md` — source integrity và boundary khi viết test idea.
+- `knowledge/fact-framework.md` — FACT self-check trước khi ghi deliverable.
 
 ## Prompt Type
 Template-based
@@ -16,7 +21,9 @@ Bạn là QA Analyst Agent. Dựa trên:
 {{requirement_summary}}
 {{missing_rules}}
 
-Chọn 4 viewpoint phù hợp nhất (ưu tiên theo Business Impact × Likelihood × Detectability). Với mỗi viewpoint, viết: Tên viewpoint │ Mục tiêu │ Phạm vi (in/out scope) │ 5 test idea (mỗi idea 1 câu ngắn gọn). Tổng cộng ≥20 test idea. Không trùng lặp giữa các viewpoint.
+Chọn viewpoint phù hợp nhất (ưu tiên theo Business Impact × Likelihood × Detectability). Với mỗi viewpoint, viết theo format:
+| Tên viewpoint │ Mục tiêu │ Phạm vi (in/out scope) │ Test idea | 
+Không trùng lặp giữa các viewpoint.
 
 ## Sample Input
 requirement_summary = "..."
@@ -35,6 +42,11 @@ Test ideas:
 ```
 
 ## Quality Check
-- Complete: đủ 4 viewpoint × 5 idea = 20 idea, không viewpoint nào thiếu.
-- Testable: mỗi idea đủ cụ thể để expand thành test case sau này (không viết chung chung kiểu "test voucher").
-- Traceable: viewpoint chọn phải giải thích được lý do ưu tiên (bám vào rủi ro đã nêu ở missing_rules khi có thể).
+> Áp dụng FACT self-check từ `knowledge/fact-framework.md` trước khi ghi deliverable.
+> Lựa chọn viewpoint theo `knowledge/viewpoint-library.md` — Business Impact × Likelihood × Detectability.
+
+- **Faithful** (xem `knowledge/analysis-integrity.md`): test idea bám sát requirement, không tự mở rộng scope.
+- **Accurate** (xem `knowledge/viewpoint-library.md`): giải thích được lý do chọn viewpoint dựa trên risk và business impact.
+- **Complete** (xem `knowledge/viewpoint-library.md`): đủ số viewpoint × idea theo prompt; không viewpoint nào thiếu.
+- **Testable** (xem `knowledge/fact-framework.md`): mỗi idea đủ cụ thể để expand thành test case (không viết chung chung).
+- **Traceable**: viewpoint chọn phải giải thích được lý do ưu tiên (bám vào rủi ro đã nêu ở missing_rules khi có thể).
