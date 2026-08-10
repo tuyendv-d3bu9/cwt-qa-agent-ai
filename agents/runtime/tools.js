@@ -81,17 +81,16 @@ export const TOOLS = {
 
 export function declarationsFor(names) {
   return names.map(n => {
-    if (!TOOLS[n]) throw new Error(`Khong co tool ten "${n}"`);
+    if (!TOOLS[n]) throw new Error(`Not found tool name "${n}"`);
     return TOOLS[n].declaration;
   });
 }
 
 export async function runTool(name, args) {
-  if (!TOOLS[name]) return { error: `Khong co tool ten "${name}"` };
+  if (!TOOLS[name]) return { error: `Not found tool name "${name}"` };
   try {
     return await TOOLS[name].run(args ?? {});
   } catch (err) {
-    // Return error to model instead of crashing - let it fix itself
     return { error: String(err.message ?? err) };
   }
 }
