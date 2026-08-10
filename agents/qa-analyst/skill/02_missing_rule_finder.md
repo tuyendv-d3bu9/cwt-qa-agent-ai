@@ -1,0 +1,32 @@
+# Skill: Missing Rule Finder
+
+## Purpose
+Dùng sau `01_requirement_summary.md` — dùng framework 06W để chủ động tìm business rule chưa được đề cập, thay vì chỉ tóm tắt lại những gì đã có.
+
+## Prompt Type
+Chain-of-thought + 06W
+
+## Variables
+{{requirement_summary}} — output của skill 01
+
+## PROMPT
+Bạn là QA Analyst Agent. Dựa trên bản tóm tắt requirement sau:
+
+{{requirement_summary}}
+
+Dùng framework 06W (What if input lạ / What if state lạ / What if data lạ / What when timing / Who else actor / What happens after) để tìm tối thiểu 5 missing rule. Với mỗi rule, viết theo format: Mô tả │ Loại (theo 06W) │ Rủi ro nếu bỏ qua │ Câu hỏi cần hỏi BA │ Priority (High/Medium/Low). Chỉ liệt kê rule THỰC SỰ chưa có trong requirement_summary — không lặp lại rule đã có ở phần BUSINESS RULES.
+
+## Sample Input
+requirement_summary = "... BUSINESS RULES: 1. Mỗi đơn áp tối đa 1 voucher ..."
+
+## Sample Output
+```
+| Mô tả | Loại | Rủi ro | Câu hỏi hỏi BA | Priority |
+|---|---|---|---|---|
+| Voucher hết hạn giữa lúc user đang checkout thì sao? | What when (timing) | User bị tính giá sai, khiếu nại | Có cần re-validate voucher ngay trước khi submit order không? | High |
+```
+
+## Quality Check
+- Faithful: chỉ nêu rule thực sự thiếu, không suy diễn quá xa khỏi domain checkout/voucher.
+- Complete: bao phủ ít nhất 3/6 câu hỏi 06W khác nhau, không dồn hết vào 1 loại.
+- Traceable: mỗi rule có câu hỏi cụ thể để hỏi BA, không viết chung chung.
