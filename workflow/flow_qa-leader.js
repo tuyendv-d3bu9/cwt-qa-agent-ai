@@ -40,7 +40,7 @@ const result = await runLeader({ task, formAnswers });
 console.log(JSON.stringify(result, null, 2));
 
 // Publish public artifacts to the shared directory.
-if (result.status === "completed") {
+if (result.status === "success") {
     await mkdir(SHARED_DIR, { recursive: true });
 
     if (result.data?.sharedArtifacts) {

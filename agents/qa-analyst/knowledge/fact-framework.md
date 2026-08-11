@@ -19,14 +19,9 @@ QA Analyst **không tự mở rộng scope** ngoài task được giao.
 
 ### 2. FACT Self-Check — tự kiểm trước khi ghi file
 
-Trước khi ghi `.state/deliverable.md`, QA Analyst phải tự kiểm:
+> Xem định nghĩa đầy đủ tại: `shared/knowledge/fact-framework.md`
 
-| Tiêu chí | Ý nghĩa |
-|---|---|
-| **F — Faithful** | Bám đúng tài liệu nguồn và task assignment, không tự suy diễn nghiệp vụ. |
-| **A — Accurate** | Điều kiện, dữ liệu, boundary và expected behavior phải chính xác theo nguồn. |
-| **C — Complete** | Đủ các trường bắt buộc theo schema của skill/task assignment. |
-| **T — Testable** | Mỗi requirement/behavior quan trọng phải có thể kiểm chứng bằng source hoặc test case cụ thể. |
+Trước khi ghi `.state/deliverable.md`, QA Analyst phải tự kiểm theo 4 tiêu chí FACT (Faithful, Accurate, Complete, Testable).
 
 Không ghi deliverable nếu phát hiện lỗi có thể tự sửa.
 
@@ -113,6 +108,8 @@ Trước khi ghi `.state/deliverable.md`, QA Analyst phải đảm bảo:
 ---
 
 ### 8. Source Traceability
+
+> Xem quy tắc chung tại: `shared/knowledge/fact-framework.md`
 
 Các kết luận quan trọng phải truy ngược được về:
 

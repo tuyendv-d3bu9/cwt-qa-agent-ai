@@ -1,22 +1,18 @@
-// agents/qa-leader/index.js
+﻿// agents/qa-leader/index.js
 // Node: QA Leader — coordinator of 6 skills (01-06), does not analyze requirements itself.
-// Leader is the highest-level coordination node, so index.js is longer than normal worker nodes.
-// This is intentional and does not violate the "concise assembler" principle.
+// Leader only does its own steps (setup + review). Orchestration loop lives in the workflow.
 
-import { readFile } from "node:fs/promises";
-import { rename, mkdir } from "node:fs/promises";
+import { readFile, rename, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { runTool } from "../runtime/tools.js";
 import { callLLM } from "../runtime/llm.js";
 import { convertDirectory } from "./tools/convert-to-md.js";
-import { run as runAnalyst } from "../qa-analyst/index.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
 const FACT = await readFile(new URL("./knowledge/fact-framework.md", import.meta.url), "utf8");
 const CONVENTIONS = await readFile(new URL("./knowledge/task-management-conventions.md", import.meta.url), "utf8");
 const SKILLS_DIR = new URL("./skills/", import.meta.url);
 const FOLDERS = ["01_Business", "02_BA", "03_Dev", "04_Design", "05_QA", "06_Communication"];
-const MAX_ROUNDS = 3;
 
 async function loadSkill(fileName) {
     return readFile(new URL(fileName, SKILLS_DIR), "utf8");
@@ -30,12 +26,18 @@ async function askLLM(skillText, userText, extraKnowledge = "") {
     return res.text;
 }
 
+// Strip markdown code fences (```json ... ```) that LLM may wrap around JSON
+function parseJSON(raw) {
+    const cleaned = raw.replace(/^```[\w]*\n?/m, "").replace(/```\s*$/m, "").trim();
+    return JSON.parse(cleaned);
+}
+
 // Step 1 (skill 01) — standardize formats, DO NOT use LLM (deterministic tool)
 async function step1_convert() {
     return convertDirectory("project-docs");
 }
 
-// Step 2 (skill 02) — classify files still located at root project-docs/ into exactly one of the 6 folders
+// Step 2 (skill 02) — classify files at root project-docs/ into exactly one of the 6 folders
 async function step2_classify() {
     const skill = await loadSkill("02_doc_classification.md");
     const listing = await runTool("list_files", { dir: "project-docs" });
@@ -45,7 +47,7 @@ async function step2_classify() {
     const contents = {};
     for (const f of unclassified) {
         const r = await runTool("read_file", { path: f.path });
-        contents[f.path] = r.content.slice(0, 1000); // only take the first 1000 characters to classify, no need to read the whole file
+        contents[f.path] = r.content.slice(0, 1000); // only first 1000 chars to classify
     }
     const raw = await askLLM(skill,
         `document_list=${JSON.stringify(unclassified.map(f => f.path))}\ndocument_contents=${JSON.stringify(contents)}\n` +
@@ -54,7 +56,6 @@ async function step2_classify() {
 
     const moved = [];
     for (const [from, to] of Object.entries(mapping)) {
-        // Normalize: strip any leading project-docs/ duplicates, then ensure exactly one prefix
         const stripped = to.replace(/^(project-docs\/)+/, "");
         const safeTo = `project-docs/${stripped}`;
         await mkdir(path.dirname(safeTo), { recursive: true });
@@ -62,12 +63,6 @@ async function step2_classify() {
         moved.push([from, safeTo]);
     }
     return { moved };
-}
-
-// Strip markdown code fences (```json ... ```) that LLM may wrap around JSON
-function parseJSON(raw) {
-    const cleaned = raw.replace(/^```[\w]*\n?/m, "").replace(/```\s*$/m, "").trim();
-    return JSON.parse(cleaned);
 }
 
 // Step 3 (skill 03) — cross-check, detect gaps/contradictions
@@ -80,13 +75,7 @@ async function step3_gapCheck() {
     return parseJSON(raw);
 }
 
-// Human-Final stop point used for both initial gaps and intermediate ASK
-async function pauseForHuman(reportMarkdown) {
-    await runTool("write_file", { path: ".state/gap-report.md", content: reportMarkdown });
-    return { status: "waiting_input", data: { formPath: ".state/gap-report.md" }, error: null };
-}
-
-// Step 4 (skill 04) — Generate task assignment, write to file Leader can write
+// Step 4 (skill 04) — Generate task assignment, write to .state/task-assignment.md
 async function step4_assignTask(task) {
     const skill = await loadSkill("04_task_assignment.md");
     const listing = await runTool("list_files", { dir: "project-docs" });
@@ -96,25 +85,18 @@ async function step4_assignTask(task) {
     await runTool("write_file", { path: ".state/task-assignment.md", content });
 }
 
-// Step 5 (skill 05) — review deliverable of Analyst by FACT framework, make decision
-async function step5_review(round) {
-    const skill = await loadSkill("05_deliverable_review.md");
-    const deliverable = await runTool("read_file", { path: ".state/deliverable.md" });
-    const raw = await askLLM(skill,
-        `deliverable_content=${deliverable.content}\nround=${round}\n` +
-        `Return only a JSON object: {"verdict": "PASS"|"FIX"|"ASK", "reportMarkdown": string}`,
-        FACT + "\n\n" + CONVENTIONS);
-    return parseJSON(raw);
-}
+// ─────────────────────────────────────────────
+// PUBLIC EXPORTS — called by the workflow, not by other agents
+// ─────────────────────────────────────────────
 
-// Step 6 (skill 06) — track progress, called after each milestone
-async function step6_trackProgress(stage, note) {
-    const skill = await loadSkill("06_workflow_progress_tracking.md");
-    const content = await askLLM(skill, `workflow_stage=${stage}\nnote=${note}`);
-    await runTool("write_file", { path: ".state/progress-report.md", content });
-}
-
-export async function run({ task, formAnswers = null }) {
+/**
+ * runSetup — Steps 1-4 (convert -> classify -> gap-check -> assign task).
+ * Returns:
+ *   { status: "not_started" }         — project-docs/ is empty
+ *   { status: "waiting_input", ... }  — gap found, user must fill gap-report
+ *   { status: "ready", ... }          — task-assignment.md written, analyst can run
+ */
+export async function runSetup({ task, formAnswers = null }) {
     const listing = await runTool("list_files", { dir: "project-docs" });
     if (listing.files.length === 0) {
         return { status: "not_started", data: null, error: "project-docs/ is empty. Please add documents and try again." };
@@ -125,29 +107,35 @@ export async function run({ task, formAnswers = null }) {
 
     if (!formAnswers) {
         const { hasGap, reportMarkdown } = await step3_gapCheck();
-        if (hasGap) return pauseForHuman(reportMarkdown);
+        if (hasGap) {
+            await runTool("write_file", { path: ".state/gap-report.md", content: reportMarkdown });
+            return { status: "waiting_input", data: { formPath: ".state/gap-report.md" }, error: null };
+        }
     }
 
     await step4_assignTask(task + (formAnswers ? `\n\nUser confirmed:\n${formAnswers}` : ""));
-    await step6_trackProgress("Task Assignment Done", "Task assigned to QA Analyst");
+    return { status: "ready", data: { taskFile: ".state/task-assignment.md" }, error: null };
+}
 
-    for (let round = 1; round <= MAX_ROUNDS; round++) {
-        const analystOut = await runAnalyst({ taskFile: ".state/task-assignment.md" });
-        if (analystOut.status !== "success") return analystOut;
+/**
+ * runReview — Step 5: review analyst deliverable by FACT framework.
+ * Returns: { verdict: "PASS" | "FIX" | "ASK", reportMarkdown: string }
+ */
+export async function runReview({ round }) {
+    const skill = await loadSkill("05_deliverable_review.md");
+    const deliverable = await runTool("read_file", { path: ".state/deliverable.md" });
+    const raw = await askLLM(skill,
+        `deliverable_content=${deliverable.content}\nround=${round}\n` +
+        `Return only a JSON object: {"verdict": "PASS"|"FIX"|"ASK", "reportMarkdown": string}`,
+        FACT + "\n\n" + CONVENTIONS);
+    return parseJSON(raw);
+}
 
-        const { verdict, reportMarkdown } = await step5_review(round);
-        if (verdict === "ASK") return pauseForHuman(reportMarkdown);
-
-        if (verdict === "PASS") {
-            await step6_trackProgress("Completed", `PASS sau ${round} vong.`);
-            return { status: "success", data: { rounds: round }, error: null };
-        }
-
-        // FIX — write feedback to task-assignment.md (do not create new file), call Analyst again
-        const current = await runTool("read_file", { path: ".state/task-assignment.md" });
-        await runTool("write_file", { path: ".state/task-assignment.md", content: current.content + `\n\n## Feedback vong ${round} (FIX)\n${reportMarkdown}` });
-    }
-
-    await step6_trackProgress("Blocked", `Exceeded ${MAX_ROUNDS} FIX rounds — need human review.`);
-    return { status: "error", data: null, error: `Exceeded ${MAX_ROUNDS} FIX rounds — need human review.` };
+/**
+ * trackProgress — Step 6: write progress report after each milestone.
+ */
+export async function trackProgress(stage, note) {
+    const skill = await loadSkill("06_workflow_progress_tracking.md");
+    const content = await askLLM(skill, `workflow_stage=${stage}\nnote=${note}`);
+    await runTool("write_file", { path: ".state/progress-report.md", content });
 }

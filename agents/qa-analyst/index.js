@@ -9,7 +9,7 @@ import { verifyDeliverable } from "./tools/count-check.js";
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
 const FACT = await readFile(new URL("./knowledge/fact-framework.md", import.meta.url), "utf8");
 const CONVENTIONS = await readFile(new URL("./knowledge/requirement-analysis-conventions.md", import.meta.url), "utf8");
-const SKILLS_DIR = new URL("./skills/", import.meta.url);
+const SKILLS_DIR = new URL("./skill/", import.meta.url);
 
 async function loadSkill(fileName) {
     return readFile(new URL(fileName, SKILLS_DIR), "utf8");
@@ -66,7 +66,7 @@ async function runFullAnalysis(task) {
 
 // REVISION LOOP — only fix the points Leader points out, do not run from the beginning
 async function runRevision(task) {
-    const skill4 = await loadSkill("04_revise_on_feedback.md");
+    const skill4 = await loadSkill("04_revise_on_feedback.md"); // tên file này đúng
     const prev = await runTool("read_file", { path: ".state/deliverable.md" });
     const feedback = task.split("## Feedback vong").pop();
     return askLLM(skill4, `feedback=${feedback}\nprevious_deliverable=${prev.content}`);
