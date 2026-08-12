@@ -6,7 +6,7 @@
 ## Responsibilities
 - Kiểm tra tài liệu: Kiểm tra sự tồn tại của tài liệu và kiểm tra định dạng file để chuẩn hóa từ các định dạng sang Markdown/CSV (docx -> md, xlsx -> csv, pptx -> md) bằng công cụ `agents/qa-leader/tools/convert-to-md.js`.
 - Đọc các file .md sau đó phân vào các thư mục tương ứng:
-  - `01_Bussiness/` : các tài liệu về nghiệp vụ doanh nghiệp, thông tin chung
+  - `01_Business/` : các tài liệu về nghiệp vụ doanh nghiệp, thông tin chung
   - `02_BA/` : các tài liệu về yêu cầu nghiệp vụ
   - `03_DEV`: các tài liệu về API, Database, và các thành phần kĩ thuật khác
   - `04_Dessign/`: các tài liệu về UI/UX

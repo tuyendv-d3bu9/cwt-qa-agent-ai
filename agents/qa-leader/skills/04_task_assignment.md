@@ -19,7 +19,7 @@ Tạo lệnh phân công công việc phân tích tài liệu cho `{{qa_analyst_
    - Phạm vi phân tích: `{{task_scope}}`
 
 2. **Danh sách tài liệu bàn giao**:
-   - Liệt kê các đường dẫn tài liệu theo từng thư mục đã chuẩn hóa (`01_Bussiness`, `02_BA`, `03_DEV`, `04_Dessign`).
+   - Liệt kê các đường dẫn tài liệu theo từng thư mục đã chuẩn hóa (`01_Business`, `02_BA`, `03_DEV`, `04_Dessign`).
 
 3. **Yêu cầu đầu ra (Deliverables)**:
    - Danh sách các sản phẩm QA Analyst cần tạo (Ví dụ: Mindmap yêu cầu, Matrix bao phủ, Danh sách Test Scenario, Test Case draft).

@@ -28,7 +28,7 @@ Tóm tắt theo đúng 7 bước: (1) FEATURE OVERVIEW, (2) ACTOR & USER ROLE, (
 
 ## Sample Input
 task = "Phân tích Function D - Voucher Checkout"
-doc_contents = { "02_BA/BRD-voucher-v1.2.md": "...", "01_Bussiness/promo-policy.md": "..." }
+doc_contents = { "02_BA/BRD-voucher-v1.2.md": "...", "01_Business/promo-policy.md": "..." }
 
 ## Sample Output
 ```

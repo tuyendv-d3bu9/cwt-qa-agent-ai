@@ -1,7 +1,7 @@
 # Skill: Information Completeness & Conflict Reporting
 
 ## Purpose
-Dùng sau khi tài liệu đã được phân loại vào các thư mục. Skill này thực hiện đối soát chéo giữa các tài liệu (`01_Bussiness`, `02_BA`, `03_DEV`, `04_Dessign`,...) để phát hiện thông tin mâu thuẫn hoặc chưa đầy đủ, sau đó tạo Báo cáo cần bổ sung thông tin gửi cho QA Manuals để xác nhận.
+Dùng sau khi tài liệu đã được phân loại vào các thư mục. Skill này thực hiện đối soát chéo giữa các tài liệu (`01_Business`, `02_BA`, `03_DEV`, `04_Dessign`,...) để phát hiện thông tin mâu thuẫn hoặc chưa đầy đủ, sau đó tạo Báo cáo cần bổ sung thông tin gửi cho QA Manuals để xác nhận.
 
 ## Prompt Type
 Chain-of-thought

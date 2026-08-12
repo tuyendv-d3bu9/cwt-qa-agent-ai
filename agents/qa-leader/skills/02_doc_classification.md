@@ -13,7 +13,7 @@ Few-shot / Classification Rules
 ## PROMPT
 Phân tích danh sách và nội dung tài liệu trong `{{document_contents}}`. Tiến hành chuyển/xếp từng file vào thư mục phù hợp theo các quy tắc sau:
 
-1. **`01_Bussiness/`**: Các tài liệu về tổng quan nghiệp vụ doanh nghiệp, mục tiêu kinh doanh, quy trình chung, thông tin dự án.
+1. **`01_Business/`**: Các tài liệu về tổng quan nghiệp vụ doanh nghiệp, mục tiêu kinh doanh, quy trình chung, thông tin dự án.
 2. **`02_BA/`**: Các tài liệu yêu cầu phần mềm, tài liệu phân tích nghiệp vụ (BRD, SRS, User Story, Use Case).
 3. **`03_DEV/`**: Các tài liệu kỹ thuật, kiến trúc hệ thống, spec API, sơ đồ Database, dữ liệu kỹ thuật.
 4. **`04_Dessign/`**: Các tài liệu về UI/UX, mô tả giao diện, wireframe, design guideline.
