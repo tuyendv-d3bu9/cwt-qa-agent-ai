@@ -123,7 +123,7 @@ export async function runSetup({ task, formAnswers = null }) {
  */
 export async function runReview({ round }) {
     const skill = await loadSkill("05_deliverable_review.md");
-    const deliverable = await runTool("read_file", { path: ".state/deliverable.md" });
+    const deliverable = await runTool("read_file", { path: ".state/deliverable-analyst.md" });
     const raw = await askLLM(skill,
         `deliverable_content=${deliverable.content}\nround=${round}\n` +
         `Return only a JSON object: {"verdict": "PASS"|"FIX"|"ASK", "reportMarkdown": string}`,

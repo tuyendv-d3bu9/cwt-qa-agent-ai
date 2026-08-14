@@ -83,7 +83,7 @@ if (savedState?.phase === "review" && formAnswers) {
 
         if (verdict === "PASS") {
             await trackProgress("Completed", `PASS after ${round} round(s).`);
-            console.log(`\n>> Done after ${round} round(s). Check .state/deliverable.md`);
+            console.log(`\n>> Done after ${round} round(s). Check .state/deliverable-analyst.md`);
             process.exit(0);
         }
 
@@ -140,7 +140,7 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
 
     if (verdict === "PASS") {
         await trackProgress("Completed", `PASS after ${round} round(s).`);
-        console.log(`\n>> Done after ${round} round(s). Check .state/deliverable.md`);
+        console.log(`\n>> Done after ${round} round(s). Check .state/deliverable-analyst.md`);
         process.exit(0);
     }
 

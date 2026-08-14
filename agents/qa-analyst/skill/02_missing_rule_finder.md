@@ -1,10 +1,10 @@
 # Skill: Missing Rule Finder
 
 ## Purpose
-Dùng sau `01_requirement_summary.md` — dùng framework 06W từ `knowledge/06W.md` để chủ động tìm business rule chưa được đề cập, thay vì chỉ tóm tắt lại những gì đã có.
+Dùng sau `01_requirement_summary.md` — dùng framework 06W từ `shared/knowledge/06W.md` để chủ động tìm business rule chưa được đề cập, thay vì chỉ tóm tắt lại những gì đã có.
 
 ## Knowledge Reference
-- `knowledge/06W.md` — framework 06W (6 dimension tìm missing rule).
+- `shared/knowledge/06W.md` — framework 06W (6 dimension tìm missing rule).
 - `knowledge/analysis-integrity.md` — rule chỉ tạo missing rule khi source chưa xác định, không suy diễn tùy tiện.
 - `knowledge/fact-framework.md` — FACT self-check trước khi ghi deliverable.
 
@@ -35,9 +35,9 @@ requirement_summary = "... BUSINESS RULES: 1. Mỗi đơn áp tối đa 1 vouche
 
 ## Quality Check
 > Áp dụng FACT self-check từ `knowledge/fact-framework.md` trước khi ghi deliverable.
-> Áp dụng rule missing rule từ `knowledge/06W.md` và `knowledge/analysis-integrity.md`.
+> Áp dụng rule missing rule từ `shared/knowledge/06W.md` và `knowledge/analysis-integrity.md`.
 
 - **Faithful** (xem `knowledge/analysis-integrity.md`): chỉ nêu rule thực sự thiếu, không suy diễn quá xa khỏi domain.
-- **Accurate** (xem `knowledge/06W.md`): phân loại đúng theo 6 dimension của 06W, không lần lộn loại.
-- **Complete** (xem `knowledge/06W.md`): bao phủ ít nhất 3/6 câu hỏi 06W khác nhau, không dồn hết vào 1 loại.
+- **Accurate** (xem `shared/knowledge/06W.md`): phân loại đúng theo 6 dimension của 06W, không lần lộn loại.
+- **Complete** (xem `shared/knowledge/06W.md`): bao phủ ít nhất 3/6 câu hỏi 06W khác nhau, không dồn hết vào 1 loại.
 - **Traceable**: mỗi rule có câu hỏi cụ thể để hỏi BA, không viết chung chung.

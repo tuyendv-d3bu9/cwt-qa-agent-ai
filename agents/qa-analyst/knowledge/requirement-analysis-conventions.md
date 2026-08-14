@@ -10,7 +10,7 @@ Tổng hợp lại các thông tin, dùng làm tham chiếu chung cho cả 3 ski
 Xem trong `knowledge/requirement-summary.md`
 
 ### 2. Missing Business Rule — Framework 06W
-Xem trong `knowledge/06W.md`
+Xem trong `shared/knowledge/06W.md` (đã promote lên shared, không còn là private của qa-analyst)
 
 ### 3. Viewpoint Library — 8 viewpoint cốt lõi
 Xem trong `knowledge/viewpoint-library.md`

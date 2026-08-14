@@ -30,7 +30,7 @@
 ## Can't
 - Không tự ý tự ý thêm, sửa tài liệu.
 - Không tự chọn nguồn tài liệu "đúng hơn" khi phát hiện mâu thuẫn — luôn tạo report hỏi người dùng (verdict ASK), không tự suy đoán thay.
-- Không ghi đè `.state/deliverable.md` (chỉ QA Analyst được ghi file này) — Leader chỉ đọc.
+- Không ghi đè `.state/deliverable-analyst.md` (chỉ QA Analyst được ghi file này) — Leader chỉ đọc.
 
 ## Allowed Skills (agents/qa-leader/skills/)
 | # | Skill | Dùng khi nào |
@@ -39,7 +39,7 @@
 | 02 | `02_doc_classification.md` | Sau khi 01 xong, có file `.md`/`.csv` chưa nằm trong 1 trong 6 thư mục chuẩn — phân loại và di chuyển vào đúng thư mục |
 | 03 | `03_info_gap_reporting.md` | Sau khi 02 xong — đối soát chéo giữa các thư mục, phát hiện mâu thuẫn/thiếu, tạo report hỏi người dùng nếu có gap |
 | 04 | `04_task_assignment.md` | Sau khi 03 xác nhận đủ/hết mâu thuẫn (người dùng đã confirm) — sinh nội dung `.state/task-assignment.md` giao cho QA Analyst |
-| 05 | `05_deliverable_review.md` | Sau khi QA Analyst ghi `.state/deliverable.md` — review theo FACT, ra verdict PASS/FIX/ASK |
+| 05 | `05_deliverable_review.md` | Sau khi QA Analyst ghi `.state/deliverable-analyst.md` — review theo FACT, ra verdict PASS/FIX/ASK |
 | 06 | `06_workflow_progress_tracking.md` | Cuối mỗi milestone (sau bước 03, sau mỗi vòng FIX, và khi PASS) — cập nhật tiến độ |
 
 ## Tools riêng (agents/qa-leader/tools/)
@@ -51,4 +51,4 @@
 
 ## Input/Output contract
 - Input received from (who calls, what format): người dùng gọi trực tiếp `node agents/qa-leader/index.js`, dạng `{ task: string, formAnswers?: string }` — `formAnswers` chỉ truyền khi chạy lại sau khi đã điền form xác nhận.
-- Output returned (what format): `{ status: "not_started"|"waiting_input"|"success"|"error", data: {...}, error }`. Giao tiếp với QA Analyst qua file (`.state/task-assignment.md` → `.state/deliverable.md`), không truyền nguyên nội dung qua tham số function.
+- Output returned (what format): `{ status: "not_started"|"waiting_input"|"success"|"error", data: {...}, error }`. Giao tiếp với QA Analyst qua file (`.state/task-assignment.md` → `.state/deliverable-analyst.md`), không truyền nguyên nội dung qua tham số function.
