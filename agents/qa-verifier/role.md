@@ -16,7 +16,7 @@
 
 ## Can
 - Đọc `memory/working/test-results.json`, `memory/working/ui-conventions.md`, `memory/working/deliverable-test-designer.md`, và ảnh `evidence/<TC_ID>-after.jpg` (chỉ ảnh `after` — `expect()` lo phần hiệu số/delta).
-- Ghi (ghi đè) `memory/working/deliverable-verifier.md`; gọi `markStep()` (ghi vào `memory/working/workflow.json`, cơ chế checkpoint dùng chung cả pipeline) khi verdict là ASK.
+- Ghi (ghi đè) `memory/working/deliverable-verifier.md`; gọi `markStep()` (ghi vào `memory/working/runs.db`, cơ chế checkpoint dùng chung cả pipeline) khi verdict là ASK.
 - Đọc trực tiếp (không copy) `agents/qa-leader/knowledge/task-management-conventions.md` mục 1 (định nghĩa PASS/FIX/ASK).
 
 ## Can't

@@ -152,7 +152,7 @@ qa-agent-ai/
 │   │   └── manifest.json                # {files: {path: hash}} — hash TỪNG FILE, để biết file nào đã đổi
 │   └── working/                         # TẦNG 4 + 5 — dữ liệu 1 lần chạy, tự sinh, xóa được (gitignored)
 │       ├── runs.db                      # TẦNG 5: phiên chạy + cửa duyệt người + lịch sử run
-│       ├── workflow.json
+│       │                                # (thay hẳn workflow.json cũ — file JSON chỉ giữ được 1 run)
 │       ├── task-assignment.md
 │       ├── deliverable-analyst.md
 │       ├── gap-report.md
@@ -365,7 +365,7 @@ Agent phân tích tài liệu, nhận task qua `task-assignment.md`. Có 4 skill
 | Layer | Vị trí | Có thể xóa? |
 |---|---|---|
 | Working memory | RAM, `contents` array | Tự mất khi run kết thúc |
-| Workflow state | `memory/working/workflow.json` | Xóa để restart toàn bộ workflow |
+| Phiên chạy + cửa duyệt | `memory/working/runs.db` | Xóa để restart toàn bộ workflow (mất luôn lịch sử các run trước) |
 | Task assignment | `memory/working/task-assignment.md` | Xóa để giao task mới |
 | Deliverable | `memory/working/deliverable-analyst.md` | Output của Analyst — xóa để chạy lại |
 | Gap report | `memory/working/gap-report.md` | Xóa để bỏ qua form cũ, bắt đầu gap check mới |

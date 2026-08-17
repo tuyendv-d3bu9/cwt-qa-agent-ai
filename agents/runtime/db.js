@@ -130,6 +130,10 @@ const SCHEMAS = {
   ],
 
   runs: [
+    // ── Tier 5: run/session state ──────────────────────────────────────────
+    // Owned by agents/runtime/memory.js — that module holds the SQL for these
+    // tables, the same way knowledge.js holds the SQL for tier 2. db.js only
+    // declares the schema and opens the file.
     `CREATE TABLE IF NOT EXISTS runs (
        run_id     TEXT PRIMARY KEY,
        feature    TEXT,
@@ -147,6 +151,16 @@ const SCHEMAS = {
        approved_by    TEXT,
        updated_at     TEXT NOT NULL,
        PRIMARY KEY (run_id, agent)
+     )`,
+
+    // "Phiên hiện tại" — the one thing the old JSON backend could not express.
+    // A single row (CHECK id = 1) pointing at the run that flow-2/flow-3 are
+    // currently working on. Without this pointer, "which run am I in?" would have
+    // to be guessed from timestamps, and resuming a paused run would be ambiguous
+    // as soon as two runs exist.
+    `CREATE TABLE IF NOT EXISTS session (
+       id     INTEGER PRIMARY KEY CHECK (id = 1),
+       run_id TEXT
      )`,
   ],
 };

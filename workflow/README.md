@@ -10,7 +10,7 @@ Thư mục này chứa **runner** cho từng luồng (flow) của AI QA Workflow
 | Flow | Trạng thái | Agent tham gia |
 |---|---|---|
 | `flow-2-leader-analyst.js` | ✅ Chạy được | QA Leader + QA Analyst (cả 2 build đầy đủ, không còn là stub) |
-| `flow-3-design-automate-verify-report.js` | ✅ Chạy được (chưa live-test) | QA Test Designer → QA Automation → QA Verifier → QA Reporter. Yêu cầu `flow-2` đã PASS trước. Có 2 điểm dừng bắt buộc chờ người: (a) trước Automation — cần flag `--confirm-mcp` (gọi MCP Playwright thật); (b) sau Automation — cần người/CI tự chạy `npx playwright test --reporter=json` (agent không tự chạy test) |
+| `flow-3-design-automate-verify-report.js` | ✅ Chạy được (chưa live-test) | QA Test Designer → QA Automation → QA Verifier → QA Reporter. Yêu cầu `flow-2` đã PASS trước. Có 3 điểm dừng bắt buộc chờ người: (a) **cửa duyệt người** trước mỗi node — `node agents/approve.js <agent> "<tên>"`, bỏ bằng `--no-gate`; (b) trước Automation — cần flag `--confirm-mcp` (gọi MCP Playwright thật); (c) sau Automation — cần người/CI tự chạy `npx playwright test --reporter=json` (agent không tự chạy test) |
 
 ## Cách chạy flow hiện tại
 
@@ -27,8 +27,11 @@ Sau khi `flow-2` PASS, chạy tiếp:
 
 ```bash
 node workflow/flow-3-design-automate-verify-report.js --confirm-mcp
+# Demo nhanh (bỏ cửa duyệt người): thêm --no-gate
+node workflow/flow-3-design-automate-verify-report.js --confirm-mcp --no-gate
 ```
 
+- **Cửa duyệt người** (mặc định BẬT): flow chặn trước mỗi node cho tới khi bạn duyệt bước trước. Duyệt bằng `node agents/approve.js <agent> "<tên>"`. Xem trạng thái phiên: `node agents/approve.js` (không tham số).
 - Nếu chưa có `memory/working/test-results.json`, flow dừng lại và yêu cầu chạy `npx playwright test --reporter=json` trước, rồi chạy lại đúng lệnh trên.
 - Verdict `FIX` từ Verifier → chạy lại đúng lệnh trên (kèm `--confirm-mcp`) để Automation sinh spec mới.
 - Verdict `ASK` → đọc `memory/working/deliverable-verifier.md`, tự xác nhận bug thật rồi tự gọi `qa-reporter` với `reportTypes` phù hợp (flow không tự đoán thay).
