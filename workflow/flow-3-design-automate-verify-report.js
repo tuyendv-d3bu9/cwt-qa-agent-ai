@@ -28,6 +28,7 @@
 //   review memory/working/deliverable-verifier.md first; run qa-reporter with
 //   reportTypes including "bug" yourself once you've confirmed real bugs.
 
+import "dotenv/config";
 import { runTool } from "../agents/runtime/tools.js";
 import { run as runTestDesigner, CONTRACT as DESIGNER_CONTRACT } from "../agents/qa-test-designer/index.js";
 import { run as runAutomation, CONTRACT as AUTOMATION_CONTRACT } from "../agents/qa-automation/index.js";

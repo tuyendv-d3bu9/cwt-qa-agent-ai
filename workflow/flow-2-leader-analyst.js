@@ -15,6 +15,7 @@
 // (TASK_FILE, GAP_FILE) — no path here derives from LLM output, so the safe()
 // containment check in tools.js adds nothing. Existence checks DO go through the
 // registry (see the read_file call below) so there is one way to ask that question.
+import "dotenv/config";
 import { readFile, writeFile } from "node:fs/promises";
 import { runSetup, runReview, trackProgress } from "../agents/qa-leader/index.js";
 import { run as runAnalyst, CONTRACT as ANALYST_CONTRACT } from "../agents/qa-analyst/index.js";
