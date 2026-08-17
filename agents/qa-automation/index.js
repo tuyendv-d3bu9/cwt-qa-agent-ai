@@ -16,7 +16,7 @@
 import { readFile } from "node:fs/promises";
 import { runTool } from "../runtime/tools.js";
 import { callLLM } from "../runtime/llm.js";
-import { contextFor, getConfig } from "../runtime/knowledge.js";
+import { contextFor, getConfig, putConfig } from "../runtime/knowledge.js";
 import { registerArtifact } from "../qa-leader/tools/impact-analysis.js";
 import { artifactId, getArtifact, upsertArtifact } from "../runtime/db.js";
 import { connectPlaywrightMCP } from "../runtime/mcp-client.js";
@@ -428,14 +428,18 @@ export async function run({ testCaseFile }) {
         };
     }
 
-    const baseUrl = getConfig("base_url", null);
+    let baseUrl = getConfig("base_url", null);
+    if (!baseUrl && process.env.BASE_URL) {
+        baseUrl = process.env.BASE_URL;
+        putConfig({ key: "base_url", value: baseUrl, description: "Set from process.env.BASE_URL" });
+    }
     if (!baseUrl) {
         return {
             status: "error", data: null,
             error: [
-                'Thiếu cấu hình "base_url" ở tầng 2 (memory/project/knowledge.db).',
+                'Thiếu cấu hình "base_url" ở tầng 2 (memory/project/knowledge.db) hoặc biến môi trường BASE_URL trong .env.',
                 "  Bước phân tích tài liệu (qa-leader) phải trích được URL môi trường test,",
-                "  hoặc đặt thủ công qua putConfig({ key: 'base_url', value: '<url>' }).",
+                "  hoặc đặt qua BASE_URL trong .env, hoặc qua putConfig({ key: 'base_url', value: '<url>' }).",
             ].join("\n"),
         };
     }
