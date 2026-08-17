@@ -106,7 +106,19 @@ async function captureSnapshot(client) {
  * snapshot when you only need one element and its ref), then browser_generate_locator so
  * PLAYWRIGHT writes the locator instead of the LLM guessing it from the tree.
  */
+function synthesizeLocator(role, name) {
+    if (!name) return null;
+    const escaped = name.replace(/'/g, "\\'");
+    if (role === "button") return `page.getByRole('button', { name: '${escaped}' })`;
+    if (role === "textbox") return `page.getByRole('textbox', { name: '${escaped}' })`;
+    if (role === "heading") return `page.getByRole('heading', { name: '${escaped}' })`;
+    if (role === "link") return `page.getByRole('link', { name: '${escaped}' })`;
+    if (role) return `page.getByRole('${role}', { name: '${escaped}' })`;
+    return `page.getByText('${escaped}')`;
+}
+
 async function resolveElement(client, registry, { role, name }) {
+    if (!name) return null;
     const cached = getElement(registry, role, name) ?? (
         role ? null : Object.values(registry.elements).find(e => e.name === name && e.locator)
     );
@@ -120,19 +132,25 @@ async function resolveElement(client, registry, { role, name }) {
         const hit = nodes.find(n => n.ref && (!role || n.role === role) && n.name) ?? nodes.find(n => n.ref);
         if (hit) {
             ref = hit.ref;
-            foundRole = hit.role;
+            foundRole = hit.role ?? foundRole;
         }
     } catch (err) {
         console.error(`  [find] "${name}": ${err.message}`);
     }
-    if (!ref) return null;
+    if (!ref) {
+        // Even if ref not found yet, produce synthetic locator as baseline if name exists
+        const fallbackLoc = synthesizeLocator(foundRole, name);
+        const stored = putElement(registry, { role: foundRole, name, locator: fallbackLoc, ref: null, source: "synthetic" });
+        return fallbackLoc ? { ...stored, from: "synthetic" } : null;
+    }
 
     let locator = null;
     try {
         const gen = await mcp(client, "browser_generate_locator", { target: ref, element: name });
         locator = snapshotTextFrom(gen).trim() || null;
     } catch (err) {
-        console.error(`  [generate_locator] "${name}": ${err.message}`);
+        // Fallback: build standard Playwright locator from role and name
+        locator = synthesizeLocator(foundRole, name);
     }
 
     const stored = putElement(registry, { role: foundRole, name, locator, ref, source: "browser_find" });
@@ -284,12 +302,15 @@ async function authorSpecFor(testCase, client, registry) {
         .map(e => `- ${e.role} "${e.name}" -> ${e.locator}`)
         .join("\n");
 
-    const specContent = await askLLM(await loadSkill("02_spec_generator.md"),
+    const rawSpec = await askLLM(await loadSkill("02_spec_generator.md"),
         `test_case=${JSON.stringify(testCase)}\n` +
         `known_locators=\n${knownLocators}\n` +
         `page_elements=\n${toPromptLines(candidates, { limit: 25 })}\n` +
         `data_file=${DATA_PATH}\n` +
         (finding ? `exploratory_finding=${JSON.stringify(finding)}\n` : ""));
+
+    const match = rawSpec.match(/```(?:ts|typescript|javascript|js)?\s*([\s\S]*?)```/i);
+    const specContent = match ? match[1].trim() + "\n" : rawSpec.trim() + "\n";
 
     return { specContent, fingerprint, finding, snapshotNodes: snap.nodes.length };
 }
