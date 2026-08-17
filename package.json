@@ -3,13 +3,19 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Practical AI for Manual Testers",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "models": "node agents/list-models.js",
-    "testing": "node agents/testing.js"
+    "testing": "node agents/testing.js",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@google/genai": "^2.16.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "@playwright/mcp": "^0.0.79",
+    "@playwright/test": "^1.62.1",
     "dotenv": "^16.6.1",
     "mammoth": "^1.12.0",
     "officeparser": "^7.5.1",

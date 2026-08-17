@@ -1,7 +1,7 @@
 # Skill: Information Completeness & Conflict Reporting
 
 ## Purpose
-Dùng sau khi tài liệu đã được phân loại vào các thư mục. Skill này thực hiện đối soát chéo giữa các tài liệu (`01_Bussiness`, `02_BA`, `03_DEV`, `04_Dessign`,...) để phát hiện thông tin mâu thuẫn hoặc chưa đầy đủ, sau đó tạo Báo cáo cần bổ sung thông tin gửi cho QA Manuals để xác nhận.
+Dùng sau khi tài liệu đã được phân loại vào các thư mục. Skill này thực hiện đối soát chéo giữa các tài liệu (`01_Business`, `02_BA`, `03_DEV`, `04_Design`,...) để phát hiện thông tin mâu thuẫn hoặc chưa đầy đủ, sau đó tạo Báo cáo cần bổ sung thông tin gửi cho QA Manuals để xác nhận.
 
 ## Prompt Type
 Chain-of-thought
@@ -14,7 +14,7 @@ Chain-of-thought
 Thực hiện đối soát chéo thông tin giữa các tài liệu được cung cấp trong `{{classified_documents}}` theo các bước sau:
 
 1. **Rà soát tính nhất quán**:
-   - So sánh thông tin giữa tài liệu yêu cầu (`02_BA`), thiết kế kỹ thuật (`03_DEV`), và giao diện (`04_Dessign`).
+   - So sánh thông tin giữa tài liệu yêu cầu (`02_BA`), thiết kế kỹ thuật (`03_DEV`), và giao diện (`04_Design`).
    - Tìm các điểm mâu thuẫn (Ví dụ: BA yêu cầu nút "Thanh toán ZaloPay", nhưng API DEV chỉ hỗ trợ "VNPay", UI lại thiết kế "Momo").
 
 2. **Rà soát tính đầy đủ**:
@@ -29,7 +29,7 @@ Thực hiện đối soát chéo thông tin giữa các tài liệu được cun
 ```text
 Thư mục 02_BA/SRS.md: "Tính năng đăng nhập hỗ trợ Email và OTP SMS."
 Thư mục 03_DEV/API.md: "Chỉ cung cấp endpoint POST /api/v1/auth/login-email."
-Thư mục 04_Dessign/UI.md: "Giao diện hiển thị form nhập Email và nút Đăng nhập bằng Social (Google, Facebook)."
+Thư mục 04_Design/UI.md: "Giao diện hiển thị form nhập Email và nút Đăng nhập bằng Social (Google, Facebook)."
 ```
 
 ## Sample Output
@@ -42,7 +42,7 @@ Thư mục 04_Dessign/UI.md: "Giao diện hiển thị form nhập Email và nú
 | STT | Loại vấn đề | Mô tả mâu thuẫn / Thiếu hụt | Nguồn trích dẫn | Câu hỏi làm rõ cho BA/DEV |
 |-----|-------------|----------------------------|-----------------|--------------------------|
 | 1 | Mâu thuẫn API - BA | BA yêu cầu đăng nhập OTP SMS nhưng DEV API chưa có endpoint OTP. | `02_BA/SRS.md` vs `03_DEV/API.md` | API có bổ sung luồng OTP SMS không, hay tạm hoãn scope này? |
-| 2 | Mâu thuẫn UI - BA | UI thiết kế Đăng nhập Social (Google/FB) nhưng SRS của BA không đề cập. | `04_Dessign/UI.md` vs `02_BA/SRS.md` | Đăng nhập Social có nằm trong scope v1 không? |
+| 2 | Mâu thuẫn UI - BA | UI thiết kế Đăng nhập Social (Google/FB) nhưng SRS của BA không đề cập. | `04_Design/UI.md` vs `02_BA/SRS.md` | Đăng nhập Social có nằm trong scope v1 không? |
 
 **Khuyến nghị:** Cần chờ QA Manuals xác nhận lại thông tin từ BA/DEV trước khi tiến hành phân tích chi tiết.
 ```

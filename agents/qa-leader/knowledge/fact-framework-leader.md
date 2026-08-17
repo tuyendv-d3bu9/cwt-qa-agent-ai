@@ -1,20 +1,15 @@
-# Knowledge: FACT Framework
+# Knowledge: FACT Framework — QA Leader
 
 ## Type
 Convention / Business Rule
 
 ## Content
 
-### 1. FACT Framework — tự kiểm trước khi ghi file
+### 1. FACT Self-Check — tự kiểm trước khi ghi file
 
-| Tiêu chí | Ý nghĩa |
-|---|---|
-| **F — Faithful** | Đúng tài liệu gốc, không thêm thắt, không suy diễn ngoài phạm vi nguồn. |
-| **A — Accurate** | Số liệu, biên giới, điều kiện chính xác — không làm tròn hay ước lượng tùy tiện. |
-| **C — Complete** | Đủ trường theo schema của skill, không bỏ sót mục bắt buộc. |
-| **T — Testable** | Mỗi mục có thể kiểm chứng được bằng tài liệu nguồn hoặc test case cụ thể. |
+> Xem định nghĩa đầy đủ tại: `memory/semantic/fact-framework.md`
 
-> Agent **phải** tự kiểm theo FACT trước khi ghi output vào file deliverable.
+Agent **phải** tự kiểm theo 4 tiêu chí FACT (Faithful, Accurate, Complete, Testable) và quy tắc phân loại vi phạm trước khi ghi output vào file deliverable.
 
 ---
 
@@ -25,14 +20,6 @@ Convention / Business Rule
 | **PASS** | Đạt cả 4 tiêu chí FACT | Chuyển sang bước tiếp theo. |
 | **FIX** | Vi phạm bất kỳ tiêu chí nào do lỗi của Agent | Gửi lại kèm nhận xét cụ thể, chỉ rõ điểm cần sửa. KHÔNG lặp nguyên câu hỏi cũ. |
 | **ASK** | Bế tắc do thiếu/mâu thuẫn thông tin từ nguồn (BA/DEV/Design), không phải lỗi Agent | Dừng, tạo report hỏi người dùng thật. KHÔNG tự đoán thay. |
-
-#### Quy tắc phân loại vi phạm chi tiết
-
-- **Vi phạm Faithful hoặc Accurate** → luôn là **FIX** (lỗi của Agent tạo ra output, không phải lỗi thiếu spec).
-- **Vi phạm Complete** vì thiếu tài liệu nguồn (không phải do Agent bỏ sót) → **ASK**.
-- **Vi phạm Complete** vì Agent tự bỏ sót dù tài liệu có đủ → **FIX**.
-- **Vi phạm Testable** → **FIX**, luôn yêu cầu bổ sung trích dẫn/test case cụ thể trước khi tính PASS.
-- Đạt cả 4 tiêu chí → **PASS**.
 
 ---
 
@@ -54,8 +41,8 @@ Tái dùng ma trận **Likelihood × Impact** để xếp hạng câu hỏi cầ
 
 ### 5. Quy ước file trao đổi với QA Analyst
 
-- Leader **chỉ ghi** `.state/task-assignment.md`, **chỉ đọc** `.state/deliverable.md`.
-- Analyst **chỉ đọc** `.state/task-assignment.md`, **chỉ ghi** `.state/deliverable.md`.
+- Leader **chỉ ghi** `memory/working/task-assignment.md`, **chỉ đọc** `memory/working/deliverable-analyst.md`.
+- Analyst **chỉ đọc** `memory/working/task-assignment.md`, **chỉ ghi** `memory/working/deliverable-analyst.md`.
 - Không agent nào được ghi đè file thuộc quyền ghi của agent kia — vi phạm ranh giới này là lỗi kiến trúc, không phải lỗi nghiệp vụ.
 - Vòng FIX không tạo file mới (`deliverable_v2.md`...) — ghi đè lại đúng 1 file, lịch sử từng round do skill 06 (`workflow_progress_tracking`) ghi log riêng.
 

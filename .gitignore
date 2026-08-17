@@ -1,3 +1,10 @@
 node_modules/
 .env
-.state
+
+.agents
+skills-lock.json
+
+TODO.md
+TODO.*.md
+
+*.db
