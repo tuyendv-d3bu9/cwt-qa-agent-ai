@@ -24,6 +24,31 @@ function client() {
   return _ai;
 }
 
+async function withRetry(fn, maxRetries = 4, initialDelayMs = 2000) {
+  let delay = initialDelayMs;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isRetryable =
+        err?.status === 503 ||
+        err?.status === 429 ||
+        err?.message?.includes("503") ||
+        err?.message?.includes("429") ||
+        err?.message?.includes("high demand") ||
+        err?.message?.includes("RESOURCE_EXHAUSTED") ||
+        err?.message?.includes("UNAVAILABLE");
+
+      if (!isRetryable || attempt === maxRetries) {
+        throw err;
+      }
+      console.warn(`[LLM] Gặp lỗi tạm thời từ Gemini API (${err.status || err.message}). Thử lại lần ${attempt}/${maxRetries} sau ${delay / 1000}s...`);
+      await new Promise(r => setTimeout(r, delay));
+      delay *= 2;
+    }
+  }
+}
+
 /**
  * @param {string}  system      - content of roles/*.md
  * @param {Array}   contents    - conversation history
@@ -48,11 +73,13 @@ export async function callLLM({ system, contents, tools = [], useCache = true, t
     return { ...hit, fromCache: true };
   }
 
-  const res = await client().models.generateContent({
-    model: MODEL,
-    contents,
-    config,
-  });
+  const res = await withRetry(() =>
+    client().models.generateContent({
+      model: MODEL,
+      contents,
+      config,
+    })
+  );
 
   const out = {
     text: res.text ?? "",
@@ -120,11 +147,13 @@ export async function callVisionLLM({ system, text, images = [], useCache = true
   const hit = await getCache(keyPayload);
   if (useCache && hit) return { ...hit, fromCache: true };
 
-  const res = await client().models.generateContent({
-    model: MODEL,
-    contents: [{ role: "user", parts }],
-    config: { systemInstruction: system, temperature },
-  });
+  const res = await withRetry(() =>
+    client().models.generateContent({
+      model: MODEL,
+      contents: [{ role: "user", parts }],
+      config: { systemInstruction: system, temperature },
+    })
+  );
 
   const out = {
     text: res.text ?? "",
