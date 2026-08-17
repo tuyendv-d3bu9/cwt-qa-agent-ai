@@ -1,20 +1,20 @@
 # Skill: Coverage Strategy
 
 ## Purpose
-Dùng đầu tiên khi nhận `.state/deliverable-analyst.md` mới (hoặc khi có bản cập nhật từ Analyst). Đi qua từng viewpoint/test idea của Analyst, gán mức rủi ro (Likelihood × Impact) và chọn technique phù hợp (EP/BVA/Decision Table/State Transition) — làm nền cho skill `02_boundary_generator.md` và `03_test_case_formatter.md`. KHÔNG tự tạo thêm test idea mới ngoài những gì Analyst đã sinh.
+Dùng đầu tiên khi nhận `memory/working/deliverable-analyst.md` mới (hoặc khi có bản cập nhật từ Analyst). Đi qua từng viewpoint/test idea của Analyst, gán mức rủi ro (Likelihood × Impact) và chọn technique phù hợp (EP/BVA/Decision Table/State Transition) — làm nền cho skill `02_boundary_generator.md` và `03_test_case_formatter.md`. KHÔNG tự tạo thêm test idea mới ngoài những gì Analyst đã sinh.
 
 ## Knowledge Reference
 - `knowledge/boundary-coverage-conventions.md` — bảng field → technique ưu tiên.
 - `agents/qa-analyst/knowledge/viewpoint-library.md` (cross-node, đọc trực tiếp) — 8 viewpoint và cách chọn.
 - `agents/qa-leader/knowledge/task-management-conventions.md` mục 3 (cross-node, đọc trực tiếp) — ma trận Likelihood × Impact.
-- `knowledge/shopgo-domain.md` — bug đã biết, để đánh dấu test idea nào là regression case.
+- `memory/project/known-issues.md` (cross-node) — bug đã biết, để đánh dấu test idea nào là regression case.
 
 ## Prompt Type
 Chain-of-thought
 
 ## Variables
-{{task}} — nội dung `.state/task-assignment.md` (scope được Leader giao)
-{{deliverable_analyst_content}} — toàn bộ nội dung `.state/deliverable-analyst.md` (4 phần: Requirement Summary, Missing Rules, Viewpoints & Test Ideas, Self Count Check)
+{{task}} — nội dung `memory/working/task-assignment.md` (scope được Leader giao)
+{{deliverable_analyst_content}} — toàn bộ nội dung `memory/working/deliverable-analyst.md` (4 phần: Requirement Summary, Missing Rules, Viewpoints & Test Ideas, Self Count Check)
 
 ## PROMPT
 Bạn là QA Test Designer Agent. Scope được giao:
@@ -28,7 +28,7 @@ Sản phẩm của QA Analyst:
 Với MỖI test idea trong mục "Viewpoints & Test Ideas", thực hiện:
 1. Gán **Likelihood × Impact** theo ma trận đã dùng cho QA Leader (không tự định nghĩa lại thang đo).
 2. Chọn **1 technique** phù hợp nhất (EP/BVA/Decision Table/State Transition) theo bảng field → technique trong `boundary-coverage-conventions.md`; nếu field không có trong bảng, giải thích lý luận tương tự.
-3. Nếu test idea trùng với bug đã biết trong `shopgo-domain.md`, đánh dấu `[REGRESSION - BUG-xxxx]`.
+3. Nếu test idea trùng với bug đã biết trong `memory/project/known-issues.md`, đánh dấu `[REGRESSION - BUG-xxxx]`.
 4. Nếu test idea liên quan đến 1 mục trong OPEN QUESTIONS của Analyst, đánh dấu `[BLOCKED - chờ OPEN QUESTION]` — KHÔNG tự suy luận câu trả lời để tiếp tục xử lý idea đó ở bước sau.
 
 Không bỏ sót test idea nào của Analyst. Không tự thêm test idea mới ở bước này.
@@ -46,7 +46,7 @@ deliverable_analyst_content = "... Viewpoints & Test Ideas: ### Viewpoint: Bound
 ```
 
 ## Quality Check
-> Áp dụng FACT self-check từ `shared/knowledge/fact-framework.md` trước khi truyền sang skill tiếp theo.
+> Áp dụng FACT self-check từ `memory/semantic/fact-framework.md` trước khi truyền sang skill tiếp theo.
 
 - **Faithful**: chỉ xử lý test idea đã có từ Analyst, không tự thêm idea mới.
 - **Accurate**: technique chọn đúng theo bảng trong `boundary-coverage-conventions.md`, không tự suy đoán ngoài 4 loại đã liệt kê nếu không giải thích lý do.

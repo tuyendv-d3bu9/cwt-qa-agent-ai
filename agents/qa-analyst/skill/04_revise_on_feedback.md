@@ -1,7 +1,7 @@
 # Skill: Revise On Feedback
 
 ## Purpose
-Dùng khi `.state/task-assignment.md` đã có thêm mục "## Feedback vòng N (FIX)" do QA Leader ghi vào (sau khi review theo FACT). Sửa đúng điểm được chỉ ra — **không viết lại toàn bộ deliverable từ đầu**.
+Dùng khi `memory/working/task-assignment.md` đã có thêm mục "## Feedback vòng N (FIX)" do QA Leader ghi vào (sau khi review theo FACT). Sửa đúng điểm được chỉ ra — **không viết lại toàn bộ deliverable từ đầu**.
 
 ## Knowledge Reference
 - `knowledge/fact-framework.md` — FACT self-check (Section 2) + FIX Round rules (Section 6) + File Boundary (Section 5).
@@ -13,7 +13,7 @@ Template-based
 
 ## Variables
 {{feedback}} — nội dung feedback vòng gần nhất, trích từ task-assignment.md
-{{previous_deliverable}} — nội dung deliverable.md hiện tại (bản bị FIX)
+{{previous_deliverable}} — nội dung deliverable-analyst.md hiện tại (bản bị FIX)
 
 ## PROMPT
 Bạn là QA Analyst Agent. Leader vừa review bản deliverable trước và yêu cầu FIX với nhận xét sau:

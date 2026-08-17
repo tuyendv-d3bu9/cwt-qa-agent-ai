@@ -21,11 +21,11 @@ Dùng khi viết `role.md` hoặc skill instruction cho agent, hoặc khi Test D
 
 ### 06W — framework TÌM missing rule
 
-Định nghĩa đầy đủ tại `shared/knowledge/06W.md` (cùng tier với `fact-framework.md`, đọc trực tiếp, không copy). Dùng để phát hiện business rule chưa được source xác định — KHÔNG dùng để thiết kế prompt, KHÔNG dùng để đánh giá output.
+Định nghĩa đầy đủ tại `memory/semantic/06W.md` (cùng tier với `fact-framework.md`, đọc trực tiếp, không copy). Dùng để phát hiện business rule chưa được source xác định — KHÔNG dùng để thiết kế prompt, KHÔNG dùng để đánh giá output.
 
 ### FACT — framework ĐÁNH GIÁ output
 
-Định nghĩa đầy đủ tại `shared/knowledge/fact-framework.md` (Faithful / Accurate / Complete / Testable). Dùng để tự kiểm deliverable trước khi ghi file — KHÔNG dùng để tìm missing rule, KHÔNG dùng để thiết kế prompt.
+Định nghĩa đầy đủ tại `memory/semantic/fact-framework.md` (Faithful / Accurate / Complete / Testable). Dùng để tự kiểm deliverable trước khi ghi file — KHÔNG dùng để tìm missing rule, KHÔNG dùng để thiết kế prompt.
 
 ## Rule
 

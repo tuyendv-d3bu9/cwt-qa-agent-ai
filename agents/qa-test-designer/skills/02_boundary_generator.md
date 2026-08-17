@@ -4,7 +4,7 @@
 Dùng ngay sau `01_coverage_strategy.md`. Với mọi dòng được gán technique BVA hoặc State Transition, sinh boundary set cụ thể dựa trên giá trị thật trong API spec (không suy đoán số liệu). KHÔNG xử lý các dòng `[BLOCKED - chờ OPEN QUESTION]`.
 
 ## Knowledge Reference
-- `knowledge/shopgo-domain.md` — API spec thật: `min_order_value`, `max_discount`, `expire_at` (UTC), làm tròn xuống (floor) tới hàng nghìn.
+- `memory/project/domain-facts.md` (cross-node) — API spec thật: `min_order_value`, `max_discount`, `expire_at` (UTC), làm tròn xuống (floor) tới hàng nghìn.
 - `knowledge/boundary-coverage-conventions.md` — bảng field → technique.
 
 ## Prompt Type
@@ -39,9 +39,9 @@ coverage_strategy_output = "| Áp mã khi order_total đúng bằng min_order_va
 ```
 
 ## Quality Check
-> Áp dụng FACT self-check từ `shared/knowledge/fact-framework.md` trước khi truyền sang skill tiếp theo.
+> Áp dụng FACT self-check từ `memory/semantic/fact-framework.md` trước khi truyền sang skill tiếp theo.
 
-- **Faithful**: chỉ sinh boundary cho field có giá trị thật trong `shopgo-domain.md`, không bịa threshold không có trong API spec.
+- **Faithful**: chỉ sinh boundary cho field có giá trị thật trong `memory/project/domain-facts.md`, không bịa threshold không có trong API spec.
 - **Accurate**: đơn vị tiền tệ (đ), UTC timestamp, quy tắc floor-rounding phải đúng như mục 9 API spec.
 - **Complete**: mỗi dòng BVA/State Transition từ skill 01 đều có ≥3 boundary case (dưới/đúng/trên hoặc trước/đúng/sau).
 - **Testable**: mỗi case có Test Data + Expected Result cụ thể, không mô tả chung.

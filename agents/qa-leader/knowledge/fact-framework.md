@@ -7,7 +7,7 @@ Convention / Business Rule
 
 ### 1. FACT Self-Check — tự kiểm trước khi ghi file
 
-> Xem định nghĩa đầy đủ tại: `shared/knowledge/fact-framework.md`
+> Xem định nghĩa đầy đủ tại: `memory/semantic/fact-framework.md`
 
 Agent **phải** tự kiểm theo 4 tiêu chí FACT (Faithful, Accurate, Complete, Testable) và quy tắc phân loại vi phạm trước khi ghi output vào file deliverable.
 
@@ -41,8 +41,8 @@ Tái dùng ma trận **Likelihood × Impact** để xếp hạng câu hỏi cầ
 
 ### 5. Quy ước file trao đổi với QA Analyst
 
-- Leader **chỉ ghi** `.state/task-assignment.md`, **chỉ đọc** `.state/deliverable.md`.
-- Analyst **chỉ đọc** `.state/task-assignment.md`, **chỉ ghi** `.state/deliverable.md`.
+- Leader **chỉ ghi** `memory/working/task-assignment.md`, **chỉ đọc** `memory/working/deliverable-analyst.md`.
+- Analyst **chỉ đọc** `memory/working/task-assignment.md`, **chỉ ghi** `memory/working/deliverable-analyst.md`.
 - Không agent nào được ghi đè file thuộc quyền ghi của agent kia — vi phạm ranh giới này là lỗi kiến trúc, không phải lỗi nghiệp vụ.
 - Vòng FIX không tạo file mới (`deliverable_v2.md`...) — ghi đè lại đúng 1 file, lịch sử từng round do skill 06 (`workflow_progress_tracking`) ghi log riêng.
 

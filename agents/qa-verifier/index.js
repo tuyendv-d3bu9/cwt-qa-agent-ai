@@ -6,10 +6,11 @@
 import { readFile } from "node:fs/promises";
 import { runTool } from "../runtime/tools.js";
 import { callLLM } from "../runtime/llm.js";
+import { markStep } from "../runtime/memory.js";
 import { parseTestResults, groupByTcId } from "./tools/parse-test-results.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
-const FACT = await readFile(new URL("../../shared/knowledge/fact-framework.md", import.meta.url), "utf8");
+const FACT = await readFile(new URL("../../memory/semantic/fact-framework.md", import.meta.url), "utf8");
 const VERDICT_MAPPING = await readFile(new URL("./knowledge/verdict-mapping.md", import.meta.url), "utf8");
 const UI_BASELINE_RULE = await readFile(new URL("./knowledge/ui-conventions-baseline.md", import.meta.url), "utf8");
 const CHECKPOINT = await readFile(new URL("./knowledge/checkpoint-protocol.md", import.meta.url), "utf8");
@@ -74,10 +75,13 @@ export async function run({ testResultsFile, uiConventionsFile, testCaseFile }) 
     const verdictMatch = /## Verdict:\s*(PASS|FIX|ASK)/i.exec(verdictReport);
     const verdict = verdictMatch ? verdictMatch[1].toUpperCase() : "ASK"; // never silently assume PASS if unparseable
 
+    await runTool("write_file", { path: "memory/working/deliverable-verifier.md", content: assembleDeliverable(verdictReport) });
+
     if (verdict === "ASK") {
-        await runTool("write_file", { path: ".state/workflow-state.json", content: JSON.stringify({ phase: "verify", round: 1 }, null, 2) });
+        await markStep("qa-verifier", { status: "waiting_ask", output: "memory/working/deliverable-verifier.md" });
+    } else {
+        await markStep("qa-verifier", { status: "done", output: "memory/working/deliverable-verifier.md" });
     }
 
-    await runTool("write_file", { path: ".state/deliverable-verifier.md", content: assembleDeliverable(verdictReport) });
-    return { status: "success", data: { deliverableFile: ".state/deliverable-verifier.md", verdict }, error: null };
+    return { status: "success", data: { deliverableFile: "memory/working/deliverable-verifier.md", verdict }, error: null };
 }

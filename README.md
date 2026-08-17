@@ -62,13 +62,13 @@
                                     │  4 Skills (01→04)  │
                                     └────────────────────┘
                                            │
-                                  .state/deliverable.md
+                                  memory/working/deliverable-analyst.md
 ```
 
 **Luồng giao tiếp giữa agents:**
-- Leader → Analyst: qua file `.state/task-assignment.md`
-- Analyst → Leader: qua file `.state/deliverable.md`
-- Leader → Human: qua file `.state/gap-report.md` (khi cần xác nhận)
+- Leader → Analyst: qua file `memory/working/task-assignment.md`
+- Analyst → Leader: qua file `memory/working/deliverable-analyst.md`
+- Leader → Human: qua file `memory/working/gap-report.md` (khi cần xác nhận)
 
 ---
 
@@ -90,7 +90,7 @@ qa-agent-ai/
 │   │   ├── tools/
 │   │   │   └── convert-to-md.js         # Chuyển DOCX/XLSX/PPTX → MD/CSV (không dùng LLM)
 │   │   └── knowledge/
-│   │       ├── fact-framework.md        # Khung FACT (Faithful/Accurate/Complete/Traceable)
+│   │       ├── fact-framework.md        # Khung FACT (Faithful/Accurate/Complete/Testable)
 │   │       └── task-management-conventions.md
 │   │
 │   ├── qa-analyst/
@@ -110,7 +110,7 @@ qa-agent-ai/
 │   ├── runtime/                         # Core runtime dùng chung
 │   │   ├── llm.js                       # Gọi Gemini API + cache
 │   │   ├── tools.js                     # Tool dispatcher (read/write file, list files)
-│   │   ├── loop.js                      # Agent loop
+│   │   ├── loop.js                      # runRoundLoop (PASS/FIX/ASK) + runStepLoop (step-decision), dùng chung
 │   │   ├── memory.js                    # Working memory
 │   │   ├── cache.js                     # Cache layer (tránh gọi API trùng)
 │   │   └── mcp-client.js               # MCP client
@@ -121,10 +121,9 @@ qa-agent-ai/
 │
 ├── workflow/
 │   ├── flow-2-leader-analyst.js         # Luồng chính: Leader + Analyst
-│   ├── flow_qa-leader.js                # Luồng Leader đơn độc
 │   └── README.md
 │
-├── project-docs/                        # 📂 ĐẶT TÀI LIỆU DỰ ÁN VÀO ĐÂY
+├── project-docs/                        # 📂 ĐẶT TÀI LIỆU DỰ ÁN VÀO ĐÂY (nguồn thô, hiếm đổi)
 │   ├── 01_Business/
 │   ├── 02_BA/
 │   ├── 03_Dev/
@@ -132,15 +131,23 @@ qa-agent-ai/
 │   ├── 05_QA/
 │   └── 06_Communication/
 │
-├── shared/                              # Kiến thức dùng chung giữa các agent
-│
-├── .state/                              # Trạng thái workflow (tự sinh, có thể xóa)
-│   ├── workflow.json
-│   ├── task-assignment.md
-│   ├── deliverable.md
-│   ├── gap-report.md
-│   ├── progress-report.md
-│   └── cache/
+├── memory/                              # Bộ nhớ 3 tầng dùng chung giữa các agent
+│   ├── working/                         # Tầng episodic — trạng thái 1 lần chạy, tự sinh, có thể xóa (gitignored)
+│   │   ├── workflow.json
+│   │   ├── task-assignment.md
+│   │   ├── deliverable-analyst.md
+│   │   ├── gap-report.md
+│   │   ├── progress-report.md
+│   │   └── cache/
+│   ├── semantic/                        # Tầng phương pháp luận — framework dùng chung, KHÔNG đổi theo dự án (commit)
+│   │   ├── 06W.md
+│   │   └── fact-framework.md
+│   └── project/                         # Tầng tri thức dự án — chưng cất từ project-docs/ bởi qa-leader, dùng chung (commit)
+│       ├── domain-facts.md              # Ghi/cập nhật tự động khi project-docs/ đổi (qa-leader skill 02b)
+│       ├── known-issues.md              # nt
+│       ├── decisions-log.md             # nt
+│       ├── glossary.md                  # KHÔNG tự động chưng cất — quy ước test case do qa-test-designer tự khởi tạo
+│       └── manifest.json                # {projectDocsHash, distilledAt} — biết khi nào cần chưng cất lại
 │
 ├── .env                                 # API key (không commit)
 ├── .env.example
@@ -217,12 +224,12 @@ Nếu Leader phát hiện thông tin thiếu/mâu thuẫn, nó sẽ dừng và t
 ```json
 {
   "status": "waiting_input",
-  "data": { "formPath": ".state/gap-report.md" }
+  "data": { "formPath": "memory/working/gap-report.md" }
 }
 ```
 
 **Hành động:**
-1. Mở file `.state/gap-report.md`
+1. Mở file `memory/working/gap-report.md`
 2. Điền câu trả lời ngay bên dưới mỗi câu hỏi
 3. Lưu file
 4. Chạy lại **đúng lệnh trên** — runner tự phát hiện và tiếp tục
@@ -231,10 +238,10 @@ Nếu Leader phát hiện thông tin thiếu/mâu thuẫn, nó sẽ dừng và t
 
 ```bash
 # Kết quả phân tích của Analyst
-cat .state/deliverable.md
+cat memory/working/deliverable-analyst.md
 
 # Tiến độ workflow
-cat .state/progress-report.md
+cat memory/working/progress-report.md
 ```
 
 ---
@@ -271,7 +278,7 @@ cat .state/progress-report.md
                                     │
                          ┌──────────▼───────────┐
                          │   QA Analyst Run     │  Skill 01→03 (hoặc 04 nếu FIX)
-                         │  (full analysis)     │  → ghi deliverable.md
+                         │  (full analysis)     │  → ghi deliverable-analyst.md
                          └──────────┬───────────┘
                                     │
                          ┌──────────▼───────────┐
@@ -313,7 +320,7 @@ Agent điều phối toàn bộ workflow. Có 6 skill tuần tự:
 **Giới hạn:**
 - Không tự sửa/thêm nội dung tài liệu
 - Không tự quyết khi thông tin mâu thuẫn → luôn tạo gap report hỏi người dùng
-- Không ghi đè `deliverable.md` (chỉ Analyst được ghi)
+- Không ghi đè `deliverable-analyst.md` (chỉ Analyst được ghi)
 
 ---
 
@@ -346,14 +353,14 @@ Agent phân tích tài liệu, nhận task qua `task-assignment.md`. Có 4 skill
 | Layer | Vị trí | Có thể xóa? |
 |---|---|---|
 | Working memory | RAM, `contents` array | Tự mất khi run kết thúc |
-| Workflow state | `.state/workflow.json` | Xóa để restart toàn bộ workflow |
-| Task assignment | `.state/task-assignment.md` | Xóa để giao task mới |
-| Deliverable | `.state/deliverable.md` | Output của Analyst — xóa để chạy lại |
-| Gap report | `.state/gap-report.md` | Xóa để bỏ qua form cũ, bắt đầu gap check mới |
-| Progress | `.state/progress-report.md` | Xóa tự do |
-| Cache API | `.state/cache/` | Xóa tự do — chỉ tốn quota khi không có cache |
+| Workflow state | `memory/working/workflow.json` | Xóa để restart toàn bộ workflow |
+| Task assignment | `memory/working/task-assignment.md` | Xóa để giao task mới |
+| Deliverable | `memory/working/deliverable-analyst.md` | Output của Analyst — xóa để chạy lại |
+| Gap report | `memory/working/gap-report.md` | Xóa để bỏ qua form cũ, bắt đầu gap check mới |
+| Progress | `memory/working/progress-report.md` | Xóa tự do |
+| Cache API | `memory/working/cache/` | Xóa tự do — chỉ tốn quota khi không có cache |
 
-> **Tip:** Xóa `.state/` để reset hoàn toàn. Xóa chỉ `.state/cache/` để bắt buộc gọi API thật.
+> **Tip:** Xóa `memory/working/` để reset hoàn toàn. Xóa chỉ `memory/working/cache/` để bắt buộc gọi API thật.
 
 ---
 
@@ -369,17 +376,14 @@ node agents/testing.js
 # Chạy luồng chính (Leader + Analyst)
 node workflow/flow-2-leader-analyst.js "Tên task của bạn"
 
-# Chạy luồng Leader đơn độc
-node workflow/flow_qa-leader.js "Tên task"
-
 # Xem kết quả phân tích
-cat .state/deliverable.md
+cat memory/working/deliverable-analyst.md
 
 # Xem tiến độ
-cat .state/progress-report.md
+cat memory/working/progress-report.md
 
 # Xem gap report (nếu có)
-cat .state/gap-report.md
+cat memory/working/gap-report.md
 ```
 
 ---
@@ -418,7 +422,7 @@ cp .env.example .env
 **Workflow bị stuck ở `waiting_input`**
 ```bash
 # Kiểm tra file gap report
-cat .state/gap-report.md
+cat memory/working/gap-report.md
 
 # Điền câu trả lời vào file, sau đó chạy lại
 node workflow/flow-2-leader-analyst.js "Task name"
@@ -426,13 +430,13 @@ node workflow/flow-2-leader-analyst.js "Task name"
 
 **Muốn bắt đầu lại từ đầu**
 ```bash
-rm -rf .state/
+rm -rf memory/working/
 node workflow/flow-2-leader-analyst.js "Task name"
 ```
 
 **Cache cũ cho kết quả sai**
 ```bash
-rm -rf .state/cache/
+rm -rf memory/working/cache/
 # Chạy lại — sẽ gọi API thật
 ```
 
@@ -449,6 +453,8 @@ rm -rf .state/cache/
 | `dotenv` | Đọc biến môi trường từ `.env` |
 | `playwright` | (Dự phòng) tự động hóa browser |
 | `@modelcontextprotocol/sdk` | MCP client cho tools |
+| `@playwright/mcp` | MCP server thật (`agents/runtime/mcp-client.js` gọi qua `npx @playwright/mcp`, resolve từ `node_modules` local, không fetch `@latest` qua mạng mỗi lần) |
+| `@playwright/test` | Test runner cho `.spec.ts` do `qa-automation` sinh ra (`npm run test:e2e`, cấu hình tại `playwright.config.ts`) |
 
 ---
 

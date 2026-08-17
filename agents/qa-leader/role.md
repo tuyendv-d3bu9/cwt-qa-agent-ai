@@ -12,6 +12,7 @@
   - `04_Dessign/`: các tài liệu về UI/UX
   - `05_QA`: các tài liệu qa, bug report, test case v...v...
   - `06_Communication`: các tài liệu về giao tiếp như log chat, email, biên bản họp...
+- Sau khi phân loại, chưng cất tri thức dự án từ `project-docs/` ra `memory/project/domain-facts.md`, `known-issues.md`, `decisions-log.md` (dùng chung cho các node khác) — chỉ chạy lại khi `project-docs/` đã đổi (so hash, xem `tools/project-docs-hash.js`), không phải mỗi lần chạy.
 - Khi thiếu/ mâu thuẫn thông tin: cần tạo report thông tin cần bổ sung cho người QA Manuals
 - Sau khi đã đủ & confrim thông tin, hãy phân công công việc cho QA Analyst để phân tích tài liệu.
 - Review các sản phẩm của QA Analyst và các QA Agent; đưa ra các quyết định phê duyệt hoặc yêu cầu chỉnh sửa, bao gồm các trạng thái (PASS / FIX / ASK)
@@ -30,25 +31,27 @@
 ## Can't
 - Không tự ý tự ý thêm, sửa tài liệu.
 - Không tự chọn nguồn tài liệu "đúng hơn" khi phát hiện mâu thuẫn — luôn tạo report hỏi người dùng (verdict ASK), không tự suy đoán thay.
-- Không ghi đè `.state/deliverable-analyst.md` (chỉ QA Analyst được ghi file này) — Leader chỉ đọc.
+- Không ghi đè `memory/working/deliverable-analyst.md` (chỉ QA Analyst được ghi file này) — Leader chỉ đọc.
 
 ## Allowed Skills (agents/qa-leader/skills/)
 | # | Skill | Dùng khi nào |
 | --- | --- | --- |
 | 01 | `01_doc_convert_inspect.md` | Đầu vào có file mới/cập nhật trong `project-docs/` — chuẩn hóa DOCX/XLSX/PPTX sang MD/CSV bằng tool, không dùng LLM |
 | 02 | `02_doc_classification.md` | Sau khi 01 xong, có file `.md`/`.csv` chưa nằm trong 1 trong 6 thư mục chuẩn — phân loại và di chuyển vào đúng thư mục |
-| 03 | `03_info_gap_reporting.md` | Sau khi 02 xong — đối soát chéo giữa các thư mục, phát hiện mâu thuẫn/thiếu, tạo report hỏi người dùng nếu có gap |
-| 04 | `04_task_assignment.md` | Sau khi 03 xác nhận đủ/hết mâu thuẫn (người dùng đã confirm) — sinh nội dung `.state/task-assignment.md` giao cho QA Analyst |
-| 05 | `05_deliverable_review.md` | Sau khi QA Analyst ghi `.state/deliverable-analyst.md` — review theo FACT, ra verdict PASS/FIX/ASK |
+| 02b | `02b_project_knowledge_distillation.md` | Ngay sau 02 — CHỈ khi `project-docs/` đổi so với lần chưng cất trước (so hash) — ghi `memory/project/{domain-facts,known-issues,decisions-log}.md` |
+| 03 | `03_info_gap_reporting.md` | Sau khi 02b xong — đối soát chéo giữa các thư mục, phát hiện mâu thuẫn/thiếu, tạo report hỏi người dùng nếu có gap |
+| 04 | `04_task_assignment.md` | Sau khi 03 xác nhận đủ/hết mâu thuẫn (người dùng đã confirm) — sinh nội dung `memory/working/task-assignment.md` giao cho QA Analyst |
+| 05 | `05_deliverable_review.md` | Sau khi QA Analyst ghi `memory/working/deliverable-analyst.md` — review theo FACT, ra verdict PASS/FIX/ASK |
 | 06 | `06_workflow_progress_tracking.md` | Cuối mỗi milestone (sau bước 03, sau mỗi vòng FIX, và khi PASS) — cập nhật tiến độ |
 
 ## Tools riêng (agents/qa-leader/tools/)
 - `convert-to-md.js`: chuẩn hóa tài liệu (docx→md, xlsx→csv, pptx→md), dùng thư viện `mammoth`/`xlsx`/`officeparser`, KHÔNG dùng LLM. Chỉ Leader dùng, không đăng ký vào tool dùng chung của các node khác.
+- `project-docs-hash.js`: hash deterministic (KHÔNG dùng LLM) toàn bộ path+nội dung `project-docs/`, dùng để skill `02b` biết có cần chưng cất lại hay không — tránh gọi LLM tốn kém mỗi lần `runSetup()` chạy khi `project-docs/` không đổi.
 
 ## Knowledge Referenced
-- Private (agents/qa-leader/knowledge/): `fact-framework.md` (khung FACT: Faithful/Accurate/Complete/Traceable, dùng cho skill 03 và 05), `task-management-conventions.md` (quy ước PASS/FIX/ASK, MAX_ROUNDS, ưu tiên gap, ranh giới file với Analyst)
-- Shared (shared/knowledge/): `shopgo-context.md` — `[GIẢ ĐỊNH]` file này đã tồn tại từ buổi thiết kế trước; nếu dự án hiện tại chưa có, bỏ qua tham chiếu này hoặc tạo lại tương đương.
+- Private (agents/qa-leader/knowledge/): `fact-framework.md` (khung FACT: Faithful/Accurate/Complete/Testable, dùng cho skill 03 và 05), `task-management-conventions.md` (quy ước PASS/FIX/ASK, MAX_ROUNDS, ưu tiên gap, ranh giới file với Analyst)
+- Project (memory/project/ — ghi bởi chính node này qua skill `02b`, KHÔNG đọc lại như input): `domain-facts.md`, `known-issues.md`, `decisions-log.md`
 
 ## Input/Output contract
 - Input received from (who calls, what format): người dùng gọi trực tiếp `node agents/qa-leader/index.js`, dạng `{ task: string, formAnswers?: string }` — `formAnswers` chỉ truyền khi chạy lại sau khi đã điền form xác nhận.
-- Output returned (what format): `{ status: "not_started"|"waiting_input"|"success"|"error", data: {...}, error }`. Giao tiếp với QA Analyst qua file (`.state/task-assignment.md` → `.state/deliverable-analyst.md`), không truyền nguyên nội dung qua tham số function.
+- Output returned (what format): `{ status: "not_started"|"waiting_input"|"success"|"error", data: {...}, error }`. Giao tiếp với QA Analyst qua file (`memory/working/task-assignment.md` → `memory/working/deliverable-analyst.md`), không truyền nguyên nội dung qua tham số function.

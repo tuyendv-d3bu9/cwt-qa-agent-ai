@@ -20,7 +20,7 @@
 
 ## Knowledge Referenced
 - Private (agents/<node>/knowledge/): 
-- Shared (shared/knowledge/): 
+- Shared (memory/semantic/): 
 
 ## Input/Output contract
 - Input received from (who calls, what format): 

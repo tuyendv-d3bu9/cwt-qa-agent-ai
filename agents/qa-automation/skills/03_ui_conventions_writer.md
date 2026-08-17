@@ -1,7 +1,7 @@
 # Skill: UI Conventions Writer
 
 ## Purpose
-Dùng sau khi đã explore xong toàn bộ test case trong lượt authoring hiện tại. Tổng hợp pattern UI THẬT đã quan sát được (không suy đoán, không lấy từ tài liệu thiết kế) thành `.state/ui-conventions.md` — dùng làm baseline oracle cho QA Verifier.
+Dùng sau khi đã explore xong toàn bộ test case trong lượt authoring hiện tại. Tổng hợp pattern UI THẬT đã quan sát được (không suy đoán, không lấy từ tài liệu thiết kế) thành `memory/working/ui-conventions.md` — dùng làm baseline oracle cho QA Verifier.
 
 ## Knowledge Reference
 - `knowledge/playwright-conventions.md`

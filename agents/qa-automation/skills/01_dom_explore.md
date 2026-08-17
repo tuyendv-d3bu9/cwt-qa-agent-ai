@@ -5,7 +5,7 @@ Dùng đầu tiên cho mỗi test case. `index.js` điều khiển trực tiếp
 
 ## Knowledge Reference
 - `knowledge/generate-once-run-many.md` — chỉ gọi MCP ở bước này, không gọi lại lúc runtime.
-- `agents/qa-test-designer/knowledge/shopgo-domain.md` (cross-node) — URL app, fact checkout không cần login.
+- `memory/project/domain-facts.md` (cross-node) — URL app, fact checkout không cần login.
 - `knowledge/playwright-conventions.md` — ưu tiên getByRole/getByLabel/getByTestId.
 
 ## Prompt Type

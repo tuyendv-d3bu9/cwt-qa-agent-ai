@@ -7,6 +7,7 @@ import path from "node:path";
 import { runTool } from "../runtime/tools.js";
 import { callLLM } from "../runtime/llm.js";
 import { convertDirectory } from "./tools/convert-to-md.js";
+import { hashProjectDocs } from "./tools/project-docs-hash.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
 const FACT = await readFile(new URL("./knowledge/fact-framework.md", import.meta.url), "utf8");
@@ -65,6 +66,86 @@ async function step2_classify() {
     return { moved };
 }
 
+// Assemble a memory/project/*.md file with the same Type/Content/Source/Consumed-by
+// shape used by the hand-authored seed files (see memory/project/*.md).
+function assembleProjectKnowledgeFile({ title, type, content, source, consumedBy }) {
+    return (
+        `# Project Knowledge: ${title}\n\n` +
+        `## Type\n${type}\n\n` +
+        `## Content\n\n${content}\n\n` +
+        `## Source\n${source}\n\n` +
+        `## Consumed by\n${consumedBy}\n`
+    );
+}
+
+// Step 2b (skill 02b) — distill project-docs/ into memory/project/{domain-facts,known-issues,decisions-log}.md.
+// Skips (no LLM call) if project-docs/ is unchanged since the last distillation
+// (tracked via a content hash in memory/project/manifest.json, tools/project-docs-hash.js).
+// Does NOT touch memory/project/glossary.md — that file is a testing convention,
+// not project-docs-derived content (see its own header note).
+async function step2b_distillKnowledge() {
+    const currentHash = await hashProjectDocs("project-docs");
+    const manifestPath = "memory/project/manifest.json";
+    const manifestRaw = await runTool("read_file", { path: manifestPath });
+    const manifest = manifestRaw.error ? null : JSON.parse(manifestRaw.content);
+
+    if (manifest?.projectDocsHash === currentHash) {
+        return { distilled: false, reason: "project-docs/ unchanged since last distillation" };
+    }
+
+    const skill = await loadSkill("02b_project_knowledge_distillation.md");
+    const listing = await runTool("list_files", { dir: "project-docs" });
+    const contents = {};
+    for (const f of listing.files) {
+        const r = await runTool("read_file", { path: f.path });
+        contents[f.path] = r.content;
+    }
+
+    const raw = await askLLM(skill,
+        `classified_documents=${JSON.stringify(listing.files.map(f => f.path))}\n` +
+        `project_docs_content=${JSON.stringify(contents)}`);
+    const { domainFacts, knownIssues, decisionsLog } = parseJSON(raw);
+
+    const stamp = new Date().toISOString();
+
+    await runTool("write_file", {
+        path: "memory/project/domain-facts.md",
+        content: assembleProjectKnowledgeFile({
+            title: "Domain Facts — Function D (Voucher/Discount Checkout)",
+            type: "Fact / Business Context (distilled from project-docs/)",
+            content: domainFacts,
+            source: `project-docs/ — chưng cất tự động bởi qa-leader lúc ${stamp}`,
+            consumedBy: "qa-test-designer, qa-automation (cross-node, đọc trực tiếp).",
+        }),
+    });
+    await runTool("write_file", {
+        path: "memory/project/known-issues.md",
+        content: assembleProjectKnowledgeFile({
+            title: "Known Issues — Function D",
+            type: "Fact / Registry (distilled from project-docs/)",
+            content: knownIssues,
+            source: `project-docs/05_QA/ — chưng cất tự động bởi qa-leader lúc ${stamp}`,
+            consumedBy: "qa-test-designer, qa-automation, qa-reporter (cross-node, đọc trực tiếp).",
+        }),
+    });
+    await runTool("write_file", {
+        path: "memory/project/decisions-log.md",
+        content: assembleProjectKnowledgeFile({
+            title: "Decisions Log — Function D",
+            type: "Fact / Change History (distilled from project-docs/06_Communication/)",
+            content: decisionsLog,
+            source: `project-docs/06_Communication/ — chưng cất tự động bởi qa-leader lúc ${stamp}`,
+            consumedBy: "Chưa có node nào load qua index.js ở thời điểm tạo — tham chiếu con người + tương lai.",
+        }),
+    });
+    await runTool("write_file", {
+        path: manifestPath,
+        content: JSON.stringify({ projectDocsHash: currentHash, distilledAt: stamp }, null, 2),
+    });
+
+    return { distilled: true, hash: currentHash };
+}
+
 // Step 3 (skill 03) — cross-check, detect gaps/contradictions
 async function step3_gapCheck() {
     const skill = await loadSkill("03_info_gap_reporting.md");
@@ -75,14 +156,14 @@ async function step3_gapCheck() {
     return parseJSON(raw);
 }
 
-// Step 4 (skill 04) — Generate task assignment, write to .state/task-assignment.md
+// Step 4 (skill 04) — Generate task assignment, write to memory/working/task-assignment.md
 async function step4_assignTask(task) {
     const skill = await loadSkill("04_task_assignment.md");
     const listing = await runTool("list_files", { dir: "project-docs" });
     const content = await askLLM(skill,
         `validated_documents=${JSON.stringify(listing.files.map(f => f.path))}\n` +
         `qa_analyst_name=QA Analyst Agent\ntask_scope=${task}`);
-    await runTool("write_file", { path: ".state/task-assignment.md", content });
+    await runTool("write_file", { path: "memory/working/task-assignment.md", content });
 }
 
 // ─────────────────────────────────────────────
@@ -104,17 +185,18 @@ export async function runSetup({ task, formAnswers = null }) {
 
     await step1_convert();
     await step2_classify();
+    await step2b_distillKnowledge();
 
     if (!formAnswers) {
         const { hasGap, reportMarkdown } = await step3_gapCheck();
         if (hasGap) {
-            await runTool("write_file", { path: ".state/gap-report.md", content: reportMarkdown });
-            return { status: "waiting_input", data: { formPath: ".state/gap-report.md" }, error: null };
+            await runTool("write_file", { path: "memory/working/gap-report.md", content: reportMarkdown });
+            return { status: "waiting_input", data: { formPath: "memory/working/gap-report.md" }, error: null };
         }
     }
 
     await step4_assignTask(task + (formAnswers ? `\n\nUser confirmed:\n${formAnswers}` : ""));
-    return { status: "ready", data: { taskFile: ".state/task-assignment.md" }, error: null };
+    return { status: "ready", data: { taskFile: "memory/working/task-assignment.md" }, error: null };
 }
 
 /**
@@ -123,7 +205,7 @@ export async function runSetup({ task, formAnswers = null }) {
  */
 export async function runReview({ round }) {
     const skill = await loadSkill("05_deliverable_review.md");
-    const deliverable = await runTool("read_file", { path: ".state/deliverable-analyst.md" });
+    const deliverable = await runTool("read_file", { path: "memory/working/deliverable-analyst.md" });
     const raw = await askLLM(skill,
         `deliverable_content=${deliverable.content}\nround=${round}\n` +
         `Return only a JSON object: {"verdict": "PASS"|"FIX"|"ASK", "reportMarkdown": string}`,
@@ -137,5 +219,5 @@ export async function runReview({ round }) {
 export async function trackProgress(stage, note) {
     const skill = await loadSkill("06_workflow_progress_tracking.md");
     const content = await askLLM(skill, `workflow_stage=${stage}\nnote=${note}`);
-    await runTool("write_file", { path: ".state/progress-report.md", content });
+    await runTool("write_file", { path: "memory/working/progress-report.md", content });
 }

@@ -1,9 +1,11 @@
+// agents/runtime/mcp-client.js
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 export async function connectPlaywrightMCP({ headless = true } = {}) {
-  const args = ["-y", "@playwright/mcp@latest"];
+  
+  const args = ["@playwright/mcp"];
   if (headless) args.push("--headless");
 
   const transport = new StdioClientTransport({

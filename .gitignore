@@ -1,5 +1,8 @@
 node_modules/
 .env
-.state
+memory/working
 .agents
 skills-lock.json
+
+TODO.md
+TODO.*.md

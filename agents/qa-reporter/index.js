@@ -1,22 +1,27 @@
 // agents/qa-reporter/index.js
 // Node: QA Reporter — 7 report types (giáo trình QA Agent Reporter), chỉ chạy
 // đúng loại được yêu cầu trong reportTypes. Report thật ghi vào output/,
-// .state/deliverable-reporter.md chỉ là bản ghi nội bộ pipeline (Self Count Check).
+// memory/working/deliverable-reporter.md chỉ là bản ghi nội bộ pipeline (Self Count Check).
 
 import { readFile } from "node:fs/promises";
 import { runTool } from "../runtime/tools.js";
 import { callLLM } from "../runtime/llm.js";
+import { createIssue } from "../runtime/jira-client.js";
 import { verifyAllDrafts } from "./tools/traceability-check.js";
 import { calculateSprintMetrics, getPreviousSprintMetrics, appendSprintMetrics } from "./tools/sprint-metrics-calculator.js";
+import { mapBugDraftToJiraIssue, mapTestCaseToJiraIssue } from "./tools/jira-mapper.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
-const FACT = await readFile(new URL("../../shared/knowledge/fact-framework.md", import.meta.url), "utf8");
+const FACT = await readFile(new URL("../../memory/semantic/fact-framework.md", import.meta.url), "utf8");
 const SCHEMA = await readFile(new URL("./knowledge/bug-report-schema.md", import.meta.url), "utf8");
 const TRACEABILITY = await readFile(new URL("./knowledge/traceability-rule.md", import.meta.url), "utf8");
 const AUDIENCE_TONE = await readFile(new URL("./knowledge/audience-tone.md", import.meta.url), "utf8");
 const REPORT_TYPES_OVERVIEW = await readFile(new URL("./knowledge/report-types-overview.md", import.meta.url), "utf8");
 const SPRINT_CONVENTIONS = await readFile(new URL("./knowledge/sprint-metrics-conventions.md", import.meta.url), "utf8");
 const OUTPUT_CONVENTIONS = await readFile(new URL("./knowledge/output-conventions.md", import.meta.url), "utf8");
+// Project knowledge (memory/project/) — bug-report-schema.md cross-references this
+// for the actual Severity scale instead of redefining it (single-source).
+const KNOWN_ISSUES = await readFile(new URL("../../memory/project/known-issues.md", import.meta.url), "utf8");
 const SKILLS_DIR = new URL("./skills/", import.meta.url);
 
 async function loadSkill(fileName) {
@@ -24,7 +29,7 @@ async function loadSkill(fileName) {
 }
 
 async function askLLM(skillText, userText) {
-    const system = [ROLE, FACT, SCHEMA, TRACEABILITY, AUDIENCE_TONE, REPORT_TYPES_OVERVIEW, SPRINT_CONVENTIONS, OUTPUT_CONVENTIONS, skillText].join("\n\n");
+    const system = [ROLE, FACT, SCHEMA, KNOWN_ISSUES, TRACEABILITY, AUDIENCE_TONE, REPORT_TYPES_OVERVIEW, SPRINT_CONVENTIONS, OUTPUT_CONVENTIONS, skillText].join("\n\n");
     const res = await callLLM({ system, contents: [{ role: "user", parts: [{ text: userText }] }] });
     return res.text;
 }
@@ -90,6 +95,41 @@ async function writeBugReportFiles(drafts) {
         outputFiles.push(path);
     }
     return outputFiles;
+}
+
+// ── Jira push (agents/runtime/jira-client.js) — see knowledge/jira-integration.md.
+// Only called when run()'s `jira.confirm === true`, checked EVERY call by the
+// caller (never a persistent flag). Errors on one issue don't abort the rest —
+// same "don't let one bad item block the whole batch" pattern as executeSteps()
+// in qa-automation. ──
+async function pushBugsToJira(drafts, projectKey) {
+    const results = [];
+    for (const d of drafts) {
+        const payload = mapBugDraftToJiraIssue({ tcId: d.tcId, draftMarkdown: d.content, projectKey });
+        try {
+            const issue = await createIssue(payload);
+            results.push({ tcId: d.tcId, status: "created", ...issue });
+        } catch (err) {
+            results.push({ tcId: d.tcId, status: "error", error: String(err.message ?? err) });
+        }
+    }
+    return results;
+}
+
+async function pushTestCasesToJira(verifierRows, testCaseDeliverable, projectKey) {
+    const results = [];
+    for (const row of verifierRows) {
+        const testCase = findTestCase(testCaseDeliverable.content, row.TC_ID);
+        if (!testCase) continue;
+        const payload = mapTestCaseToJiraIssue({ testCase, verdict: row.Status, projectKey });
+        try {
+            const issue = await createIssue(payload);
+            results.push({ tcId: row.TC_ID, status: "created", ...issue });
+        } catch (err) {
+            results.push({ tcId: row.TC_ID, status: "error", error: String(err.message ?? err) });
+        }
+    }
+    return results;
 }
 
 async function runDailySummary({ testExecutionData, bugsText, manualInputs }) {
@@ -165,10 +205,15 @@ async function runLogNarrative({ verifierDeliverable }) {
 
 export async function run({
     reportTypes = ["bug"],
-    verifierDeliverableFile = ".state/deliverable-verifier.md",
-    testCaseFile = ".state/deliverable-test-designer.md",
+    verifierDeliverableFile = "memory/working/deliverable-verifier.md",
+    testCaseFile = "memory/working/deliverable-test-designer.md",
     manualInputs = {},
     sprintDate = null,
+    // Jira extension (agents/runtime/jira-client.js) — undefined/null by default,
+    // run() behaves exactly as before if this isn't passed. `confirm: true` MUST
+    // be passed explicitly EVERY call (see knowledge/jira-integration.md) — there
+    // is no persistent flag/env var to "always allow" writing to Jira.
+    jira = null,
 } = {}) {
     const verifierDeliverable = await runTool("read_file", { path: verifierDeliverableFile });
     const testCaseDeliverable = await runTool("read_file", { path: testCaseFile });
@@ -178,13 +223,16 @@ export async function run({
     const outputFiles = [];
     let bugCheck = { ok: true, results: [], issues: [] };
     let bugsText = "";
+    let bugDrafts = [];
 
     // Bug drafts are the shared input for daily/sprint/release/rca — computed once,
-    // but only WRITTEN to output/ if "bug" was explicitly requested.
-    const needsBugData = reportTypes.some(t => ["bug", "daily", "sprint", "release", "rca"].includes(t));
+    // but only WRITTEN to output/ if "bug" was explicitly requested. Also needed
+    // (independent of reportTypes) if the caller wants them pushed to Jira.
+    const needsBugData = reportTypes.some(t => ["bug", "daily", "sprint", "release", "rca"].includes(t)) || jira?.pushBugs;
     if (needsBugData) {
         const { drafts, check } = await buildBugDrafts({ candidates, testCaseDeliverable });
         bugCheck = check;
+        bugDrafts = drafts;
         bugsText = drafts.map(d => d.content).join("\n\n") || "Không có bug candidate nào trong lần chạy này.";
         if (reportTypes.includes("bug")) {
             outputFiles.push(...(await writeBugReportFiles(drafts)));
@@ -217,15 +265,33 @@ export async function run({
         outputFiles.push(...(await runLogNarrative({ verifierDeliverable })));
     }
 
+    // Jira push — ONLY when confirm === true is passed explicitly on THIS call.
+    // No other condition (reportTypes, env var, previous call) can substitute
+    // for this — see knowledge/jira-integration.md.
+    let jiraResults = null;
+    if (jira?.confirm === true) {
+        jiraResults = { bugs: [], testCases: [] };
+        if (jira.pushBugs) {
+            jiraResults.bugs = await pushBugsToJira(bugDrafts, jira.projectKey);
+        }
+        if (jira.pushTestCases) {
+            jiraResults.testCases = await pushTestCasesToJira(verifierRows, testCaseDeliverable, jira.projectKey);
+        }
+    }
+
     const checkSection = bugCheck.ok
         ? `Bug draft: đạt — tất cả ${bugCheck.results.length} draft đều đủ trường/traceable.`
         : `Bug draft: **CHƯA ĐẠT** — ${bugCheck.issues.join(" ")}`;
+    const jiraSection = jiraResults
+        ? `\n## Jira\n- Bugs pushed: ${jiraResults.bugs.length}\n- Test cases pushed: ${jiraResults.testCases.length}\n`
+        : "";
     const deliverableContent =
         `# Deliverable — QA Reporter (nội bộ pipeline)\n\n` +
         `## Report types đã chạy\n${reportTypes.join(", ")}\n\n` +
         `## Output files\n${outputFiles.map(f => `- ${f}`).join("\n")}\n\n` +
-        `## Self Count Check\n${checkSection}\n`;
-    await runTool("write_file", { path: ".state/deliverable-reporter.md", content: deliverableContent });
+        `## Self Count Check\n${checkSection}\n` +
+        jiraSection;
+    await runTool("write_file", { path: "memory/working/deliverable-reporter.md", content: deliverableContent });
 
-    return { status: "success", data: { deliverableFile: ".state/deliverable-reporter.md", outputFiles }, error: null };
+    return { status: "success", data: { deliverableFile: "memory/working/deliverable-reporter.md", outputFiles, jiraResults }, error: null };
 }

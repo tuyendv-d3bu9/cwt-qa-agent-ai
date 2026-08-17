@@ -5,7 +5,7 @@ Convention
 
 ## Content
 
-`output/` (thư mục mới ở gốc repo, KHÔNG bị xóa như `.state/`) chứa mọi deliverable hoàn chỉnh của qa-reporter — báo cáo thật cần giữ lại, không phải scratch state của pipeline.
+`output/` (thư mục mới ở gốc repo, KHÔNG bị xóa như `memory/working/`) chứa mọi deliverable hoàn chỉnh của qa-reporter — báo cáo thật cần giữ lại, không phải scratch state của pipeline.
 
 ### Đường dẫn theo từng loại report
 | Loại report | Đường dẫn |
@@ -20,8 +20,8 @@ Convention
 | Sprint history (dữ liệu trend) | `output/sprint-history.json` |
 
 ### Rule
-- `output/` KHÔNG nằm trong quy ước "xóa để chạy lại" của `.state/` (xem README.md) — mỗi lần chạy GHI ĐÈ đúng file tương ứng với loại report vừa chạy; các report khác không bị đụng tới.
-- `.state/deliverable-reporter.md` vẫn tồn tại song song — đó là bản ghi nội bộ pipeline (Self Count Check) để Leader/pipeline kiểm tra, KHÔNG phải bản báo cáo cho người đọc cuối. Không nhầm lẫn 2 vai trò này.
+- `output/` KHÔNG nằm trong quy ước "xóa để chạy lại" của `memory/working/` (xem README.md) — mỗi lần chạy GHI ĐÈ đúng file tương ứng với loại report vừa chạy; các report khác không bị đụng tới.
+- `memory/working/deliverable-reporter.md` vẫn tồn tại song song — đó là bản ghi nội bộ pipeline (Self Count Check) để Leader/pipeline kiểm tra, KHÔNG phải bản báo cáo cho người đọc cuối. Không nhầm lẫn 2 vai trò này.
 
 ## Source
 Thiết kế QA Reporter, xác nhận cùng người dùng 2026-08-14.

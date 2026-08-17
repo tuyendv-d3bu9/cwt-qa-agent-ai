@@ -12,7 +12,7 @@ Chain-of-thought
 
 ## Variables
 {{failed_test}} — 1 kết quả test FAILED đã parse: `{ tcId, status, errorMessage }`
-{{ui_conventions}} — toàn bộ nội dung `.state/ui-conventions.md`
+{{ui_conventions}} — toàn bộ nội dung `memory/working/ui-conventions.md`
 {{expected_result}} — Expected Result gốc của TC_ID này từ `deliverable-test-designer.md`
 
 ## PROMPT

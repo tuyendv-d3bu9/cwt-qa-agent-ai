@@ -67,7 +67,7 @@ async function runFullAnalysis(task) {
 // REVISION LOOP — only fix the points Leader points out, do not run from the beginning
 async function runRevision(task) {
     const skill4 = await loadSkill("04_revise_on_feedback.md"); // tên file này đúng
-    const prev = await runTool("read_file", { path: ".state/deliverable-analyst.md" });
+    const prev = await runTool("read_file", { path: "memory/working/deliverable-analyst.md" });
     const feedback = task.split("## Feedback vong").pop();
     return askLLM(skill4, `feedback=${feedback}\nprevious_deliverable=${prev.content}`);
 }
@@ -80,6 +80,6 @@ export async function run({ taskFile }) {
         ? await runRevision(task.content)
         : await runFullAnalysis(task.content);
 
-    await runTool("write_file", { path: ".state/deliverable-analyst.md", content: deliverable });
-    return { status: "success", data: { deliverableFile: ".state/deliverable-analyst.md" }, error: null };
+    await runTool("write_file", { path: "memory/working/deliverable-analyst.md", content: deliverable });
+    return { status: "success", data: { deliverableFile: "memory/working/deliverable-analyst.md" }, error: null };
 }

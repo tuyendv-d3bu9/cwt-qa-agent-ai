@@ -1,11 +1,11 @@
 # Skill: Test Case Formatter
 
 ## Purpose
-Dùng cuối cùng, sau `01_coverage_strategy.md` và `02_boundary_generator.md`. Gộp kết quả 2 skill trước thành test case hoàn chỉnh theo 8 trường chuẩn, sẵn sàng ghi vào `.state/deliverable-test-designer.md`.
+Dùng cuối cùng, sau `01_coverage_strategy.md` và `02_boundary_generator.md`. Gộp kết quả 2 skill trước thành test case hoàn chỉnh theo 8 trường chuẩn, sẵn sàng ghi vào `memory/working/deliverable-test-designer.md`.
 
 ## Knowledge Reference
-- `knowledge/glossary.md` — TC_ID convention (`TC-D-<nnn>`), 4 mức Priority, 8 trường chuẩn.
-- `knowledge/shopgo-domain.md` — Bug ID để gắn Tags cho regression case.
+- `memory/project/glossary.md` (cross-node) — TC_ID convention (`TC-D-<nnn>`), 4 mức Priority, 8 trường chuẩn.
+- `memory/project/known-issues.md` (cross-node) — Bug ID để gắn Tags cho regression case.
 
 ## Prompt Type
 Template-based
@@ -24,7 +24,7 @@ Với mỗi test idea/boundary case, viết thành 1 test case đủ 8 trường
 `TC_ID | Title | Precondition | Steps | Test Data | Expected Result | Priority | Tags`
 
 - `TC_ID`: theo format `TC-D-<nnn>`, tăng dần, không trùng.
-- `Priority`: theo 4 mức đã định nghĩa trong `glossary.md` (Critical/High/Medium/Low) — dựa trên Likelihood × Impact đã gán ở skill 01.
+- `Priority`: theo 4 mức đã định nghĩa trong `memory/project/glossary.md` (Critical/High/Medium/Low) — dựa trên Likelihood × Impact đã gán ở skill 01.
 - `Tags`: ghi technique đã dùng (`[BVA]`, `[EP]`, `[Decision Table]`, `[State Transition]`) và Bug ID nếu là regression case (`[BUG-1170]`).
 - Dòng `[BLOCKED - chờ OPEN QUESTION]` từ skill 01: KHÔNG viết thành test case — liệt kê riêng vào mục "Chưa thể tạo test case (chờ OPEN QUESTION)" ở cuối, giữ nguyên lý do.
 
@@ -43,7 +43,7 @@ boundary_sets = "### Boundary set — order_total vs min_order_value ..."
 ```
 
 ## Quality Check
-> Áp dụng FACT self-check từ `shared/knowledge/fact-framework.md` trước khi ghi deliverable.
+> Áp dụng FACT self-check từ `memory/semantic/fact-framework.md` trước khi ghi deliverable.
 
 - **Faithful**: không tự trả lời OPEN QUESTIONS bằng cách viết test case giả định.
 - **Accurate**: Priority phải khớp với Likelihood × Impact đã gán ở skill 01, không tự đổi.

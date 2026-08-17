@@ -1,7 +1,7 @@
 # Skill: Requirement Summary
 
 ## Purpose
-Dùng đầu tiên khi QA Analyst nhận task từ Leader (qua `.state/task-assignment.md`). Đọc tài liệu liên quan trong `project-docs/` và tóm tắt theo 7 phần chuẩn — làm nền cho 2 skill tiếp theo (missing rule, viewpoint).
+Dùng đầu tiên khi QA Analyst nhận task từ Leader (qua `memory/working/task-assignment.md`). Đọc tài liệu liên quan trong `project-docs/` và tóm tắt theo 7 phần chuẩn — làm nền cho 2 skill tiếp theo (missing rule, viewpoint).
 
 ## Knowledge Reference
 - `knowledge/requirement-summary.md` — schema 7 phần chuẩn và rule tổng hợp requirement.

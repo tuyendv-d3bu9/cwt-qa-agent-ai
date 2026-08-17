@@ -20,7 +20,7 @@ Khi có thể, mỗi business rule, missing rule và test idea quan trọng ph�
 ### FACT
 Đọc `/knowledge/fact-framework.md` để hiểu FACT
 
-Trước khi ghi `deliverable.md`, Analyst phải tự kiểm:
+Trước khi ghi `deliverable-analyst.md`, Analyst phải tự kiểm:
 
 - **Faithful**
 - **Accurate**

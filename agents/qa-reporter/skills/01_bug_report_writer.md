@@ -1,7 +1,7 @@
 # Skill: Bug Report Writer
 
 ## Purpose
-Dùng cho mỗi TC_ID nhãn `BEHAVIOR_MISMATCH` hoặc `UNCLEAR` trong `.state/deliverable-verifier.md`. Viết bug report DRAFT theo 7 trường chuẩn — đây là draft dựa trên nghi ngờ có căn cứ, chưa phải kết luận cuối cùng đã qua xác nhận con người.
+Dùng cho mỗi TC_ID nhãn `BEHAVIOR_MISMATCH` hoặc `UNCLEAR` trong `memory/working/deliverable-verifier.md`. Viết bug report DRAFT theo 7 trường chuẩn — đây là draft dựa trên nghi ngờ có căn cứ, chưa phải kết luận cuối cùng đã qua xác nhận con người.
 
 ## Knowledge Reference
 - `knowledge/bug-report-schema.md` — 7 trường, phân biệt Severity/Priority, rule "luôn review trước khi dùng".

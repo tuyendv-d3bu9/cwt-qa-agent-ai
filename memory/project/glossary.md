@@ -1,14 +1,16 @@
-# Knowledge: Glossary
+# Project Knowledge: Glossary
 
 ## Type
 Convention / Registry
+
+> **Lưu ý khác với 3 file còn lại trong `memory/project/`**: file này KHÔNG được "chưng cất" từ `project-docs/` — nội dung là quy ước kiểm thử do QA Test Designer tự khởi tạo (TC_ID format, thang Priority test case, 8 trường chuẩn), không tồn tại trong bất kỳ tài liệu nghiệp vụ nào. Được gộp vào `memory/project/` vì nhiều node cùng dùng chung, nhưng bước chưng cất tự động của `qa-leader` (skill `02b_project_knowledge_distillation.md`) KHÔNG regenerate file này.
 
 ## Content
 
 ### TC_ID convention
 Format: `TC-D-<nnn>` — `D` = Function D (voucher/discount checkout), `<nnn>` = số thứ tự 3 chữ số, tăng dần theo thứ tự sinh ra, không tái sử dụng số đã xoá. Ví dụ: `TC-D-001`, `TC-D-002`.
 
-### Priority levels
+### Priority levels (của TEST CASE — khác với Priority của BUG REPORT, xem `agents/qa-reporter/knowledge/bug-report-schema.md`)
 | Priority | Định nghĩa |
 |---|---|
 | **Critical** | Chặn hoặc gây sai lệch luồng chính (happy path), hoặc gây sai lệch tiền/dữ liệu khách hàng nếu fail. |
@@ -28,5 +30,5 @@ Hai khái niệm này không được gộp hay dùng lẫn lộn trong bất k�
 ## Source
 Quy ước Test Designer — TC_ID convention và Priority levels do agent này khởi tạo lần đầu (chưa có source trước đó trong repo để tham chiếu), xác nhận cùng người dùng 2026-08-14. Mục "8 trường chuẩn" và phân biệt `role.md` vs `role:` lấy từ nội dung đã thống nhất trong buổi thiết kế.
 
-## Node referenced
-qa-test-designer
+## Consumed by
+qa-test-designer (chính), qa-reporter (cross-reference để phân biệt 2 khái niệm Priority).

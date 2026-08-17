@@ -1,8 +1,10 @@
+// agents/runtime/cache.js
+
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const CACHE_DIR = path.resolve(process.cwd(), ".state/cache");
+const CACHE_DIR = path.resolve(process.cwd(), "memory/working/cache");
 
 export function cacheEnabled() {
   return !process.argv.includes("--no-cache");

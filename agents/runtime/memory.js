@@ -1,7 +1,9 @@
+// agents/runtime/memory.js
+
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const STATE_FILE = path.resolve(process.cwd(), ".state/workflow.json");
+const STATE_FILE = path.resolve(process.cwd(), "memory/working/workflow.json");
 
 const EMPTY = { run_id: null, feature: null, created_at: null, steps: [] };
 

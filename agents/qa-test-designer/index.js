@@ -8,11 +8,13 @@ import { callLLM } from "../runtime/llm.js";
 import { verifyDeliverable } from "./tools/coverage-check.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
-const FACT = await readFile(new URL("../../shared/knowledge/fact-framework.md", import.meta.url), "utf8");
+const FACT = await readFile(new URL("../../memory/semantic/fact-framework.md", import.meta.url), "utf8");
 const FRAMEWORKS = await readFile(new URL("./knowledge/framework-definitions.md", import.meta.url), "utf8");
-const DOMAIN = await readFile(new URL("./knowledge/shopgo-domain.md", import.meta.url), "utf8");
 const COVERAGE = await readFile(new URL("./knowledge/boundary-coverage-conventions.md", import.meta.url), "utf8");
-const GLOSSARY = await readFile(new URL("./knowledge/glossary.md", import.meta.url), "utf8");
+// Project knowledge (memory/project/) — distilled from project-docs/, shared across nodes.
+const DOMAIN = await readFile(new URL("../../memory/project/domain-facts.md", import.meta.url), "utf8");
+const KNOWN_ISSUES = await readFile(new URL("../../memory/project/known-issues.md", import.meta.url), "utf8");
+const GLOSSARY = await readFile(new URL("../../memory/project/glossary.md", import.meta.url), "utf8");
 // Cross-node knowledge — read directly, not copied (see role.md "Cross-node").
 const VIEWPOINTS = await readFile(new URL("../qa-analyst/knowledge/viewpoint-library.md", import.meta.url), "utf8");
 const RISK_MATRIX = await readFile(new URL("../qa-leader/knowledge/task-management-conventions.md", import.meta.url), "utf8");
@@ -23,7 +25,7 @@ async function loadSkill(fileName) {
 }
 
 async function askLLM(skillText, userText) {
-    const system = [ROLE, FACT, FRAMEWORKS, DOMAIN, COVERAGE, GLOSSARY, VIEWPOINTS, RISK_MATRIX, skillText].join("\n\n");
+    const system = [ROLE, FACT, FRAMEWORKS, DOMAIN, KNOWN_ISSUES, COVERAGE, GLOSSARY, VIEWPOINTS, RISK_MATRIX, skillText].join("\n\n");
     const res = await callLLM({
         system,
         contents: [{ role: "user", parts: [{ text: userText }] }],
@@ -58,6 +60,6 @@ export async function run({ taskFile, deliverableFile }) {
     const check = verifyDeliverable({ deliverableAnalystMarkdown: analystDeliverable.content, testCaseMarkdown: testCases });
     const deliverable = assembleDeliverable({ testCases, check });
 
-    await runTool("write_file", { path: ".state/deliverable-test-designer.md", content: deliverable });
-    return { status: "success", data: { deliverableFile: ".state/deliverable-test-designer.md" }, error: null };
+    await runTool("write_file", { path: "memory/working/deliverable-test-designer.md", content: deliverable });
+    return { status: "success", data: { deliverableFile: "memory/working/deliverable-test-designer.md" }, error: null };
 }
