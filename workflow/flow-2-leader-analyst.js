@@ -6,11 +6,18 @@
 // Run:
 //   node workflow/flow-2-leader-analyst.js "Task name to analyze"
 
-import { readFile, writeFile, access } from "node:fs/promises";
+// readFile/writeFile are used here only on the two hard-coded constants below
+// (TASK_FILE, GAP_FILE) — no path here derives from LLM output, so the safe()
+// containment check in tools.js adds nothing. Existence checks DO go through the
+// registry (see the read_file call below) so there is one way to ask that question.
+import { readFile, writeFile } from "node:fs/promises";
 import { runSetup, runReview, trackProgress } from "../agents/qa-leader/index.js";
-import { run as runAnalyst } from "../agents/qa-analyst/index.js";
+import { run as runAnalyst, CONTRACT as ANALYST_CONTRACT } from "../agents/qa-analyst/index.js";
+import { runTool } from "../agents/runtime/tools.js";
 import { loadState, markStep } from "../agents/runtime/memory.js";
+import { initDatabases } from "../agents/runtime/db.js";
 import { runRoundLoop } from "../agents/runtime/loop.js";
+import { requireInputs, verifyProduced } from "../agents/runtime/handover.js";
 
 const MAX_ROUNDS = 3;
 const GAP_FILE = "memory/working/gap-report.md";
@@ -20,14 +27,21 @@ const task =
     process.argv.slice(2).join(" ") ||
     "Analyze Function D - Voucher Checkout";
 
+// ── Create/migrate the databases before any agent runs ──────────
+// Explicit here rather than lazily on first use, so the schema always exists and a
+// first-time creation is something you can see in the log.
+for (const { path, created } of initDatabases()) {
+    if (created) console.log(`Created ${path}`);
+}
+
 // ── Read gap-report if it exists (user's answers) ──────────────
+// One read_file through the registry replaces the old access()+readFile() pair —
+// absence shows up as res.error, so no separate existence probe is needed.
 let formAnswers = null;
-try {
-    await access(GAP_FILE);
-    formAnswers = await readFile(GAP_FILE, "utf8");
+const gapRes = await runTool("read_file", { path: GAP_FILE });
+if (!gapRes.error) {
+    formAnswers = gapRes.content;
     console.log(`Found ${GAP_FILE} — using its content as confirmed answers.\n`);
-} catch {
-    // first run
 }
 
 // ── Load persisted state (agents/runtime/memory.js — single checkpoint
@@ -77,9 +91,16 @@ const result = await runRoundLoop({
     maxRounds: MAX_ROUNDS,
     produce: async (round) => {
         console.log(`[Round ${round}] Running QA Analyst…`);
+        // Handover rule 3 (memory/README.md) — declared inputs checked before the call.
+        await requireInputs(ANALYST_CONTRACT);
         const analystOut = await runAnalyst({ taskFile: TASK_FILE });
         if (analystOut.status !== "success") {
             console.error(`Analyst error:`, analystOut);
+            process.exit(1);
+        }
+        const produced = await verifyProduced(ANALYST_CONTRACT);
+        if (!produced.ok) {
+            console.error(`Analyst báo success nhưng KHÔNG ghi output đã khai: ${produced.missing.join(", ")}`);
             process.exit(1);
         }
     },

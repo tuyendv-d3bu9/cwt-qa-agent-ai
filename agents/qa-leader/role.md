@@ -9,7 +9,7 @@
   - `01_Business/` : các tài liệu về nghiệp vụ doanh nghiệp, thông tin chung
   - `02_BA/` : các tài liệu về yêu cầu nghiệp vụ
   - `03_DEV`: các tài liệu về API, Database, và các thành phần kĩ thuật khác
-  - `04_Dessign/`: các tài liệu về UI/UX
+  - `04_Design/`: các tài liệu về UI/UX
   - `05_QA`: các tài liệu qa, bug report, test case v...v...
   - `06_Communication`: các tài liệu về giao tiếp như log chat, email, biên bản họp...
 - Sau khi phân loại, chưng cất tri thức dự án từ `project-docs/` ra `memory/project/domain-facts.md`, `known-issues.md`, `decisions-log.md` (dùng chung cho các node khác) — chỉ chạy lại khi `project-docs/` đã đổi (so hash, xem `tools/project-docs-hash.js`), không phải mỗi lần chạy.
@@ -38,7 +38,9 @@
 | --- | --- | --- |
 | 01 | `01_doc_convert_inspect.md` | Đầu vào có file mới/cập nhật trong `project-docs/` — chuẩn hóa DOCX/XLSX/PPTX sang MD/CSV bằng tool, không dùng LLM |
 | 02 | `02_doc_classification.md` | Sau khi 01 xong, có file `.md`/`.csv` chưa nằm trong 1 trong 6 thư mục chuẩn — phân loại và di chuyển vào đúng thư mục |
-| 02b | `02b_project_knowledge_distillation.md` | Ngay sau 02 — CHỈ khi `project-docs/` đổi so với lần chưng cất trước (so hash) — ghi `memory/project/{domain-facts,known-issues,decisions-log}.md` |
+| 02b | `02b_project_knowledge_distillation.md` | Ngay sau 02 — CHỈ với những tài liệu đã đổi (so hash TỪNG FILE) — ghi tầng 3 `memory/project/{domain-facts,known-issues,decisions-log}.md` theo **từng mục `###`**, không ghi đè cả file |
+| 02c | `02c_reference_extraction.md` | Cùng lượt với 02b — trích tri thức tham chiếu ỔN ĐỊNH (thuật ngữ/thành phần/field/config) vào tầng 2 để các node sau **tra cứu** thay vì nạp cả |
+| 02d | `02d_change_impact_analysis.md` | Chỉ khi có tài liệu **đổi nội dung/bị xoá** — diễn giải tác động. Danh sách artifact lỗi thời do `tools/impact-analysis.js` truy deterministic từ graph, skill này KHÔNG được thêm/bớt |
 | 03 | `03_info_gap_reporting.md` | Sau khi 02b xong — đối soát chéo giữa các thư mục, phát hiện mâu thuẫn/thiếu, tạo report hỏi người dùng nếu có gap |
 | 04 | `04_task_assignment.md` | Sau khi 03 xác nhận đủ/hết mâu thuẫn (người dùng đã confirm) — sinh nội dung `memory/working/task-assignment.md` giao cho QA Analyst |
 | 05 | `05_deliverable_review.md` | Sau khi QA Analyst ghi `memory/working/deliverable-analyst.md` — review theo FACT, ra verdict PASS/FIX/ASK |
@@ -46,11 +48,15 @@
 
 ## Tools riêng (agents/qa-leader/tools/)
 - `convert-to-md.js`: chuẩn hóa tài liệu (docx→md, xlsx→csv, pptx→md), dùng thư viện `mammoth`/`xlsx`/`officeparser`, KHÔNG dùng LLM. Chỉ Leader dùng, không đăng ký vào tool dùng chung của các node khác.
-- `project-docs-hash.js`: hash deterministic (KHÔNG dùng LLM) toàn bộ path+nội dung `project-docs/`, dùng để skill `02b` biết có cần chưng cất lại hay không — tránh gọi LLM tốn kém mỗi lần `runSetup()` chạy khi `project-docs/` không đổi.
+- `project-docs-hash.js`: hash deterministic (KHÔNG dùng LLM) **theo TỪNG FILE** + `diffManifest()` trả `{added, changed, removed}` — để chỉ gửi tài liệu đã đổi cho LLM, tài liệu không đổi không tốn gì và tri thức của nó không bị viết lại.
+- `project-knowledge-store.js`: ghi tầng 3 theo **từng mục `###`** (`storeKnowledgeSection`), giữ nguyên từng byte các mục khác kể cả người đã sửa tay; đồng thời ghi edge `section ← doc` và `knowledge-file ← section` vào graph truy vết.
+- `impact-analysis.js`: deterministic (KHÔNG dùng LLM) — `computeImpact()` truy graph `derives_from` theo chuỗi `doc → section → knowledge-file → testcase → spec` để biết chính xác cái gì lỗi thời + ai phải xử lý; `renderImpactReport()` sinh bảng; `registerArtifact()` cho các node hạ nguồn đăng ký sản phẩm của chúng. Báo cáo **ghi rõ giới hạn** khi graph chưa đủ, không im lặng coi là "không ảnh hưởng".
 
 ## Knowledge Referenced
-- Private (agents/qa-leader/knowledge/): `fact-framework.md` (khung FACT: Faithful/Accurate/Complete/Testable, dùng cho skill 03 và 05), `task-management-conventions.md` (quy ước PASS/FIX/ASK, MAX_ROUNDS, ưu tiên gap, ranh giới file với Analyst)
-- Project (memory/project/ — ghi bởi chính node này qua skill `02b`, KHÔNG đọc lại như input): `domain-facts.md`, `known-issues.md`, `decisions-log.md`
+- **Kiến trúc memory**: xem `memory/README.md` — định nghĩa chuẩn 5 tầng + hợp đồng handover của cả pipeline. File `role.md` này KHÔNG định nghĩa lại tầng memory, chỉ liệt kê node này đọc gì.
+- Private (agents/qa-leader/knowledge/): `fact-framework-leader.md` (**lớp bổ sung** cho node này, đặt TRÊN định nghĩa gốc ở tầng 1 `memory/semantic/fact-framework.md` — cả hai đều được nạp, dùng cho skill 03 và 05), `task-management-conventions.md` (quy ước PASS/FIX/ASK, MAX_ROUNDS, ưu tiên gap, ranh giới file với Analyst)
+- Tầng 3 (`memory/project/*.md` — **ghi** bởi chính node này qua skill `02b`, theo TỪNG MỤC `###`, không ghi đè cả file; KHÔNG đọc lại như input): `domain-facts.md`, `known-issues.md`, `decisions-log.md`
+- Tầng 2 (`memory/project/knowledge.db` — **ghi** bởi chính node này qua skill `02c_reference_extraction.md`): thuật ngữ / thành phần / field / cấu hình dự án, để các node sau tra cứu qua `contextFor()`
 
 ## Input/Output contract
 - Input received from (who calls, what format): người dùng gọi trực tiếp `node agents/qa-leader/index.js`, dạng `{ task: string, formAnswers?: string }` — `formAnswers` chỉ truyền khi chạy lại sau khi đã điền form xác nhận.

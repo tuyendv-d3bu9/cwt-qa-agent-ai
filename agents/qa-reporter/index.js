@@ -35,14 +35,36 @@ async function askLLM(skillText, userText) {
 }
 
 // ── Parsers (same conventions as qa-verifier/qa-automation) ──
+/**
+ * Verifier's per-test-case table. Its shape grew when the visual channel was added:
+ *   TC_ID | expect() | Nhãn | Kênh dùng | Lý do | Ảnh evidence
+ * The old destructuring took column 4 as "Note", which is now "Kênh dùng" — so the note
+ * shown in reports would have read "functional+visual" instead of the actual reason.
+ * Columns are read by position but the count is checked, so a future shape change fails
+ * loudly here instead of quietly mislabelling reports.
+ */
 function parseVerifierTable(verifierMarkdown) {
-    const rows = verifierMarkdown.split("\n")
+    const rows = String(verifierMarkdown ?? "").split("\n")
         .filter(l => l.trim().startsWith("|") && !l.includes("---") && !/^\|\s*TC_ID/i.test(l.trim()));
-    return rows.map(l => {
+    const parsed = [];
+    for (const l of rows) {
         const cells = l.split("|").map(c => c.trim()).filter((_, i, arr) => i > 0 && i < arr.length - 1);
-        const [TC_ID, Status, Label, Note] = cells;
-        return { TC_ID, Status, Label: (Label || "").toUpperCase(), Note };
-    });
+        const [TC_ID, Status, Label, Channel, Reason, Evidence] = cells;
+        if (!TC_ID || TC_ID === "—") continue;
+        parsed.push({
+            TC_ID,
+            Status,
+            Label: (Label || "").toUpperCase(),
+            Channel: Channel ?? null,
+            Reason: Reason ?? null,
+            // `\`evidence/TC-x-after.jpg\`` -> evidence/TC-x-after.jpg ; "—" means none
+            Evidence: Evidence && Evidence !== "—" ? Evidence.replace(/`/g, "").trim() : null,
+            // Kept so older callers reading `.Note` still get the meaningful text.
+            Note: Reason ?? null,
+            cellCount: cells.length,
+        });
+    }
+    return parsed;
 }
 
 function findTestCase(testCaseMarkdown, tcId) {
@@ -53,9 +75,14 @@ function findTestCase(testCaseMarkdown, tcId) {
     return { TC_ID, Title, Precondition, Steps, TestData, ExpectedResult, Priority, Tags };
 }
 
+/**
+ * Count designed test cases. The ID pattern is generic — `TC-<F>-<nnn>` where <F> is the
+ * project's feature code (memory/semantic/testing-conventions.md). This used to hardcode
+ * `TC-D-\d{3}`, which silently counted 0 for any project whose feature code is not "D".
+ */
 function countDesignedTestCases(testCaseMarkdown) {
-    return testCaseMarkdown.split("\n")
-        .filter(l => l.trim().startsWith("|") && /TC-D-\d{3}/.test(l)).length;
+    return String(testCaseMarkdown ?? "").split("\n")
+        .filter(l => l.trim().startsWith("|") && /\bTC-[A-Za-z0-9]+-\d+\b/.test(l)).length;
 }
 
 function extractSeverity(draftMarkdown) {
@@ -73,8 +100,18 @@ async function buildBugDrafts({ candidates, testCaseDeliverable }) {
     const drafts = [];
     for (const candidate of candidates) {
         const testCase = findTestCase(testCaseDeliverable.content, candidate.TC_ID);
+        // Evidence path comes from the verifier table, verified to exist before being
+        // quoted — a bug report pointing at a missing screenshot is worse than one that
+        // honestly says there is none.
+        let evidence = null;
+        if (candidate.Evidence) {
+            const check = await runTool("file_exists", { path: candidate.Evidence });
+            evidence = check.exists ? candidate.Evidence : null;
+            if (!check.exists) console.error(`  [bug] ${candidate.TC_ID}: verifier ghi ảnh ${candidate.Evidence} nhưng file không tồn tại — bỏ khỏi bug report.`);
+        }
         const content = await askLLM(skill,
-            `tc_id=${candidate.TC_ID}\nverifier_classification=${JSON.stringify(candidate)}\ntest_case=${JSON.stringify(testCase)}`);
+            `tc_id=${candidate.TC_ID}\nverifier_classification=${JSON.stringify(candidate)}\ntest_case=${JSON.stringify(testCase)}\n` +
+            `evidence_image=${evidence ?? "[không có ảnh evidence]"}`);
         drafts.push({ tcId: candidate.TC_ID, content, severity: (extractSeverity(content) || "").toLowerCase() });
     }
     const check = verifyAllDrafts(drafts.map(d => ({ tcId: d.tcId, draftMarkdown: d.content })));
@@ -202,6 +239,15 @@ async function runLogNarrative({ verifierDeliverable }) {
     await runTool("write_file", { path: "output/qa-narrative.md", content });
     return ["output/qa-narrative.md"];
 }
+
+// Handover contract — see memory/README.md rule 3. Output files live in output/ and
+// depend on which reportTypes were requested, so `produces` lists only the internal
+// pipeline record that is written on every run.
+export const CONTRACT = {
+    agent: "qa-reporter",
+    requires: ["memory/working/deliverable-verifier.md", "memory/working/deliverable-test-designer.md"],
+    produces: ["memory/working/deliverable-reporter.md"],
+};
 
 export async function run({
     reportTypes = ["bug"],

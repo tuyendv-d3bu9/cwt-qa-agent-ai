@@ -8,7 +8,7 @@ Chain-of-thought / Decision-matrix
 
 ## Variables
 - `{{deliverable_content}}`: Nội dung sản phẩm do QA Analyst / QA Agent tạo ra.
-- `{{reference_docs}}`: Tài liệu gốc đối chiếu (`02_BA`, `03_DEV`, `04_Dessign`).
+- `{{reference_docs}}`: Tài liệu gốc đối chiếu (`02_BA`, `03_DEV`, `04_Design`).
 - `{{review_checklist}}`: Tiêu chí kiểm tra chất lượng.
 
 ## PROMPT

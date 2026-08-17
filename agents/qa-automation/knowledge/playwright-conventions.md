@@ -16,7 +16,7 @@ Convention
 - `evidence/` — chứa screenshot khi fail (tạo khi có test fail thật, không tạo trước).
 
 ### Selector
-Chỉ dùng selector đã quan sát thật qua MCP Playwright snapshot (skill `01_dom_explore.md`). Ưu tiên `getByRole` / `getByLabel` / `getByTestId` nếu DOM thật có hỗ trợ; chỉ dùng CSS selector thô khi không có lựa chọn nào khác — và phải ghi rõ lý do trong comment ngắn gọn khi dùng CSS selector thô.
+Chỉ dùng selector đã quan sát thật qua MCP Playwright snapshot (skill `01_exploratory_ui_discovery.md`). Ưu tiên `getByRole` / `getByLabel` / `getByTestId` nếu DOM thật có hỗ trợ; chỉ dùng CSS selector thô khi không có lựa chọn nào khác — và phải ghi rõ lý do trong comment ngắn gọn khi dùng CSS selector thô.
 
 ## Source
 Thiết kế QA Automation.

@@ -18,7 +18,7 @@ Analysis Convention
 Khi có thể, mỗi business rule, missing rule và test idea quan trọng phải truy được về source hoặc requirement tương ứng.
 
 ### FACT
-Đọc `/knowledge/fact-framework.md` để hiểu FACT
+Đọc `memory/semantic/fact-framework.md` để hiểu FACT
 
 Trước khi ghi `deliverable-analyst.md`, Analyst phải tự kiểm:
 

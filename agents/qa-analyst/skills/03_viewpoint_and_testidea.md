@@ -6,7 +6,7 @@ Dùng sau `02_missing_rule_finder.md` — chọn viewpoint phù hợp nhất (t�
 ## Knowledge Reference
 - `knowledge/viewpoint-library.md` — 8 viewpoint của QA và tiêu chí selection (Business Impact × Likelihood × Detectability).
 - `knowledge/analysis-integrity.md` — source integrity và boundary khi viết test idea.
-- `knowledge/fact-framework.md` — FACT self-check trước khi ghi deliverable.
+- `memory/semantic/fact-framework.md` — FACT self-check trước khi ghi deliverable.
 
 ## Prompt Type
 Template-based
@@ -42,11 +42,11 @@ Test ideas:
 ```
 
 ## Quality Check
-> Áp dụng FACT self-check từ `knowledge/fact-framework.md` trước khi ghi deliverable.
+> Áp dụng FACT self-check từ `memory/semantic/fact-framework.md` trước khi ghi deliverable.
 > Lựa chọn viewpoint theo `knowledge/viewpoint-library.md` — Business Impact × Likelihood × Detectability.
 
 - **Faithful** (xem `knowledge/analysis-integrity.md`): test idea bám sát requirement, không tự mở rộng scope.
 - **Accurate** (xem `knowledge/viewpoint-library.md`): giải thích được lý do chọn viewpoint dựa trên risk và business impact.
 - **Complete** (xem `knowledge/viewpoint-library.md`): đủ số viewpoint × idea theo prompt; không viewpoint nào thiếu.
-- **Testable** (xem `knowledge/fact-framework.md`): mỗi idea đủ cụ thể để expand thành test case (không viết chung chung).
+- **Testable** (xem `memory/semantic/fact-framework.md`): mỗi idea đủ cụ thể để expand thành test case (không viết chung chung).
 - **Traceable**: viewpoint chọn phải giải thích được lý do ưu tiên (bám vào rủi ro đã nêu ở missing_rules khi có thể).

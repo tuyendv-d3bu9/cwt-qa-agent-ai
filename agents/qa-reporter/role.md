@@ -48,6 +48,7 @@ Chưa có skill revision — node này hiện single-shot cho mỗi loại repor
 - `jira-mapper.js`: map deterministic (KHÔNG dùng LLM) bug draft/test case đã có sẵn sang payload Jira (`mapBugDraftToJiraIssue`, `mapTestCaseToJiraIssue`) — chỉ trích field có sẵn, không tự bịa field mới.
 
 ## Knowledge Referenced
+- **Kiến trúc memory**: xem `memory/README.md` — định nghĩa chuẩn 5 tầng + hợp đồng handover của cả pipeline. File `role.md` này KHÔNG định nghĩa lại tầng memory, chỉ liệt kê node này đọc gì.
 - Private (agents/qa-reporter/knowledge/): `bug-report-schema.md` (Severity SCALE nay cross-reference sang `memory/project/known-issues.md`, không định nghĩa lại), `traceability-rule.md`, `audience-tone.md` (Dev vs PM), `report-types-overview.md` (mục lục 7 report), `sprint-metrics-conventions.md` (công thức + quy ước sprint-history.json), `output-conventions.md` (đường dẫn trong `output/`), `jira-integration.md` (thiết kế + rule bắt buộc của phần mở rộng Jira)
 - Shared (memory/semantic/): `fact-framework.md`
 - Project (memory/project/ — tri thức dự án đã chưng cất, KHÔNG copy): `known-issues.md` (Severity taxonomy + dữ liệu bug thật, grounding cho Bug Report)

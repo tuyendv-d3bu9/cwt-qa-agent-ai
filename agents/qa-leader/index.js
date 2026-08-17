@@ -2,18 +2,27 @@
 // Node: QA Leader — coordinator of 6 skills (01-06), does not analyze requirements itself.
 // Leader only does its own steps (setup + review). Orchestration loop lives in the workflow.
 
-import { readFile, rename, mkdir } from "node:fs/promises";
-import path from "node:path";
+// node:fs is used ONLY to load this node's own static role/knowledge/skill files at
+// module load time. Every dynamic path (anything derived from LLM output or pipeline
+// data) goes through runTool() so tools.js's safe() containment check applies.
+import { readFile } from "node:fs/promises";
 import { runTool } from "../runtime/tools.js";
 import { callLLM } from "../runtime/llm.js";
 import { convertDirectory } from "./tools/convert-to-md.js";
-import { hashProjectDocs } from "./tools/project-docs-hash.js";
+import { hashProjectDocsPerFile, diffManifest } from "./tools/project-docs-hash.js";
+import { storeKnowledgeSection, flagKnowledgeFromRemovedSource } from "./tools/project-knowledge-store.js";
+import { putTerm, putComponent, putField, putConfig } from "../runtime/knowledge.js";
+import { computeImpact, renderImpactReport } from "./tools/impact-analysis.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
-const FACT = await readFile(new URL("./knowledge/fact-framework.md", import.meta.url), "utf8");
+// Tier 1 first, then this node's own layer on top. The private file explicitly says
+// "see memory/semantic/fact-framework.md for the full definition" — but that file was
+// never loaded, so the prompt pointed the LLM at something it could not read.
+const FACT_SHARED = await readFile(new URL("../../memory/semantic/fact-framework.md", import.meta.url), "utf8");
+const FACT_LEADER = await readFile(new URL("./knowledge/fact-framework-leader.md", import.meta.url), "utf8");
+const FACT = [FACT_SHARED, FACT_LEADER].join("\n\n");
 const CONVENTIONS = await readFile(new URL("./knowledge/task-management-conventions.md", import.meta.url), "utf8");
 const SKILLS_DIR = new URL("./skills/", import.meta.url);
-const FOLDERS = ["01_Business", "02_BA", "03_Dev", "04_Design", "05_QA", "06_Communication"];
 
 async function loadSkill(fileName) {
     return readFile(new URL(fileName, SKILLS_DIR), "utf8");
@@ -38,13 +47,48 @@ async function step1_convert() {
     return convertDirectory("project-docs");
 }
 
-// Step 2 (skill 02) — classify files at root project-docs/ into exactly one of the 6 folders
-async function step2_classify() {
-    const skill = await loadSkill("02_doc_classification.md");
-    const listing = await runTool("list_files", { dir: "project-docs" });
-    const unclassified = listing.files.filter(f => !FOLDERS.some(folder => f.path.includes(`/${folder}/`)));
-    if (unclassified.length === 0) return { moved: [] };
+/** Split a path on either separator — list_files returns OS-native paths (backslashes on Windows). */
+const segments = (p) => String(p).split(/[\\/]+/).filter(Boolean);
 
+/**
+ * A document is "already classified" when it sits in a subdirectory of the source
+ * directory rather than at its root.
+ *
+ * This replaces a hardcoded list of 6 folder names, which was wrong twice over:
+ *   - it compared with `path.includes("/01_Business/")` while list_files returns
+ *     OS-native paths, so on Windows NOTHING ever matched;
+ *   - the literals had drifted from the real folders on disk (`03_Dev` vs `03_DEV`,
+ *     `04_Design` vs `04_Design`).
+ * Combined, every already-filed document was treated as unfiled, so each run
+ * re-classified the whole corpus with the LLM and moved every file again.
+ *
+ * Deriving it also satisfies the genericity rule in memory/README.md: the folder
+ * taxonomy is project data, and another project may organise documents differently.
+ */
+function isClassified(filePath, sourceDir) {
+    const parts = segments(filePath);
+    return parts[0] === sourceDir && parts.length > 2;
+}
+
+/** Category folders this project actually uses, read off the real directory tree. */
+function existingFolders(files, sourceDir) {
+    const folders = new Set();
+    for (const f of files) {
+        const parts = segments(f.path);
+        if (parts[0] === sourceDir && parts.length > 2) folders.add(parts[1]);
+    }
+    return [...folders].sort();
+}
+
+// Step 2 (skill 02) — file documents sitting at the root of the source directory into
+// one of the category folders that project already uses.
+async function step2_classify(sourceDir = "project-docs") {
+    const skill = await loadSkill("02_doc_classification.md");
+    const listing = await runTool("list_files", { dir: sourceDir });
+    const unclassified = listing.files.filter(f => !isClassified(f.path, sourceDir));
+    if (unclassified.length === 0) return { moved: [], skipped: [], folders: existingFolders(listing.files, sourceDir) };
+
+    const folders = existingFolders(listing.files, sourceDir);
     const contents = {};
     for (const f of unclassified) {
         const r = await runTool("read_file", { path: f.path });
@@ -52,98 +96,226 @@ async function step2_classify() {
     }
     const raw = await askLLM(skill,
         `document_list=${JSON.stringify(unclassified.map(f => f.path))}\ndocument_contents=${JSON.stringify(contents)}\n` +
-        `Return ONLY a raw JSON object (no markdown, no code block) mapping source path -> destination path, e.g. { "project-docs/tenFile.md": "project-docs/02_BA/tenFile.md", ... }`);
+        `available_folders=${JSON.stringify(folders)}\n` +
+        `Chỉ được chọn thư mục đích trong available_folders — KHÔNG tự tạo tên thư mục mới, KHÔNG tự sửa chính tả tên thư mục.\n` +
+        `Return ONLY a raw JSON object (no markdown, no code block) mapping source path -> destination path, e.g. { "${sourceDir}/tenFile.md": "${sourceDir}/${folders[0] ?? "01_Business"}/tenFile.md", ... }`);
     const mapping = parseJSON(raw);
 
+    // `to` comes from LLM output, so it must not reach the filesystem unchecked:
+    // runTool("move_file") validates BOTH ends through tools.js's safe(). The prefix
+    // normalisation below only fixes the common "project-docs/project-docs/x.md"
+    // duplication — it is NOT the security boundary (a "../" left inside `stripped`
+    // is what safe() is there to reject).
     const moved = [];
+    const skipped = [];
+    const dupPrefix = new RegExp(`^(${sourceDir}[\\\\/])+`);
     for (const [from, to] of Object.entries(mapping)) {
-        const stripped = to.replace(/^(project-docs\/)+/, "");
-        const safeTo = `project-docs/${stripped}`;
-        await mkdir(path.dirname(safeTo), { recursive: true });
-        await rename(from, safeTo);
-        moved.push([from, safeTo]);
+        const stripped = to.replace(dupPrefix, "");
+        const dest = `${sourceDir}/${stripped}`;
+        const res = await runTool("move_file", { from, to: dest });
+        if (res.error) {
+            console.error(`  [classify] bỏ qua "${from}" -> "${dest}": ${res.error}`);
+            skipped.push([from, dest, res.error]);
+            continue;
+        }
+        moved.push([from, dest]);
     }
-    return { moved };
+    return { moved, skipped };
 }
 
-// Assemble a memory/project/*.md file with the same Type/Content/Source/Consumed-by
-// shape used by the hand-authored seed files (see memory/project/*.md).
-function assembleProjectKnowledgeFile({ title, type, content, source, consumedBy }) {
-    return (
-        `# Project Knowledge: ${title}\n\n` +
-        `## Type\n${type}\n\n` +
-        `## Content\n\n${content}\n\n` +
-        `## Source\n${source}\n\n` +
-        `## Consumed by\n${consumedBy}\n`
-    );
+const MANIFEST_PATH = "memory/project/manifest.json";
+const IMPACT_REPORT_PATH = "memory/working/impact-report.md";
+const VALID_KINDS = new Set(["domain", "issue", "decision"]);
+const VALID_STATUSES = new Set(["confirmed", "pending"]);
+const COMPONENT_KINDS = new Set(["page", "api", "module", "screen", "service"]);
+
+/**
+ * Deterministic gate on the LLM's distillation output — no fact reaches the DB
+ * without a source_file pointing at a document we actually just fed it. This is the
+ * Testable half of the FACT framework enforced in code rather than trusted to the
+ * prompt: an unsourced "fact" cannot be traced back by a reviewer, so it is dropped.
+ */
+function validateFacts(facts, allowedSources) {
+    const accepted = [];
+    const rejected = [];
+    for (const fact of Array.isArray(facts) ? facts : []) {
+        const why = [];
+        if (!VALID_KINDS.has(fact?.kind)) why.push(`kind không hợp lệ: ${JSON.stringify(fact?.kind)}`);
+        if (!VALID_STATUSES.has(fact?.status)) why.push(`status không hợp lệ: ${JSON.stringify(fact?.status)}`);
+        if (!fact?.title?.trim()) why.push("thiếu title");
+        if (!fact?.content?.trim()) why.push("thiếu content");
+        if (!fact?.source_file) why.push("thiếu source_file");
+        else if (!allowedSources.has(fact.source_file)) why.push(`source_file không nằm trong danh sách file đã đổi: ${fact.source_file}`);
+
+        if (why.length) rejected.push({ fact, why });
+        else accepted.push(fact);
+    }
+    return { accepted, rejected };
 }
 
-// Step 2b (skill 02b) — distill project-docs/ into memory/project/{domain-facts,known-issues,decisions-log}.md.
-// Skips (no LLM call) if project-docs/ is unchanged since the last distillation
-// (tracked via a content hash in memory/project/manifest.json, tools/project-docs-hash.js).
-// Does NOT touch memory/project/glossary.md — that file is a testing convention,
-// not project-docs-derived content (see its own header note).
-async function step2b_distillKnowledge() {
-    const currentHash = await hashProjectDocs("project-docs");
-    const manifestPath = "memory/project/manifest.json";
-    const manifestRaw = await runTool("read_file", { path: manifestPath });
-    const manifest = manifestRaw.error ? null : JSON.parse(manifestRaw.content);
+/** Deterministic gate for tier-2 rows — same reasoning as validateFacts(). */
+function validateReferences(parsed, allowedSources) {
+    const ok = { terms: [], components: [], fields: [], config: [] };
+    const rejected = [];
+    const sourced = (row) => row?.source_ref && allowedSources.has(row.source_ref);
 
-    if (manifest?.projectDocsHash === currentHash) {
-        return { distilled: false, reason: "project-docs/ unchanged since last distillation" };
+    for (const row of parsed?.terms ?? []) {
+        if (row?.term?.trim() && row?.definition?.trim() && sourced(row)) ok.terms.push(row);
+        else rejected.push({ type: "term", row });
     }
+    for (const row of parsed?.components ?? []) {
+        if (row?.name?.trim() && COMPONENT_KINDS.has(row?.kind) && sourced(row)) ok.components.push(row);
+        else rejected.push({ type: "component", row });
+    }
+    for (const row of parsed?.fields ?? []) {
+        if (row?.name?.trim() && sourced(row)) ok.fields.push(row);
+        else rejected.push({ type: "field", row });
+    }
+    for (const row of parsed?.config ?? []) {
+        if (row?.key?.trim() && row?.value != null && sourced(row)) ok.config.push(row);
+        else rejected.push({ type: "config", row });
+    }
+    return { ok, rejected };
+}
 
-    const skill = await loadSkill("02b_project_knowledge_distillation.md");
-    const listing = await runTool("list_files", { dir: "project-docs" });
+/** Read only the documents that actually changed. */
+async function readChangedDocs(files) {
     const contents = {};
-    for (const f of listing.files) {
-        const r = await runTool("read_file", { path: f.path });
-        contents[f.path] = r.content;
+    for (const file of files) {
+        const r = await runTool("read_file", { path: file });
+        if (r.error) {
+            console.error(`  [distill] không đọc được ${file}: ${r.error}`);
+            continue;
+        }
+        contents[file] = r.content;
+    }
+    return contents;
+}
+
+// Step 2b — update project knowledge for the documents that CHANGED.
+//
+// Two destinations, per memory/README.md:
+//   tier 3 (skill 02b) — memory/project/*.md, ONE SECTION per fact, replaced in place.
+//                        The user's hand edits elsewhere in the file survive untouched.
+//   tier 2 (skill 02c) — terms/components/fields/config rows, queried on demand
+//                        instead of injected into every prompt.
+//
+// Per-file hashes (tools/project-docs-hash.js vs memory/project/manifest.json) decide
+// what is sent to the LLM: a document that did not change costs nothing and its
+// knowledge is not rewritten.
+//
+// Does NOT touch memory/project/glossary.md — see memory/README.md (tier 1 vs tier 2).
+async function step2b_updateProjectKnowledge() {
+    const currentHashes = await hashProjectDocsPerFile("project-docs");
+    const manifestRes = await runTool("read_json", { path: MANIFEST_PATH });
+    const previous = manifestRes.error ? null : manifestRes.data?.files;
+
+    const { added, changed, removed, unchangedCount } = diffManifest(previous, currentHashes);
+    const toUpdate = [...added, ...changed];
+
+    if (toUpdate.length === 0 && removed.length === 0) {
+        return { updated: false, reason: "tài liệu dự án không đổi kể từ lần cập nhật trước", unchangedCount };
     }
 
-    const raw = await askLLM(skill,
-        `classified_documents=${JSON.stringify(listing.files.map(f => f.path))}\n` +
-        `project_docs_content=${JSON.stringify(contents)}`);
-    const { domainFacts, knownIssues, decisionsLog } = parseJSON(raw);
+    // A deleted source document does NOT delete knowledge — the user may have edited
+    // those sections by hand. They get flagged for a human to decide instead.
+    const flagged = [];
+    for (const file of removed) {
+        flagged.push({ file, affected: flagKnowledgeFromRemovedSource(file) });
+    }
 
+    const sections = { inserted: 0, updated: 0, unchanged: 0 };
+    const reference = { terms: 0, components: 0, fields: 0, config: 0 };
+    let rejectedFacts = [];
+    let rejectedRefs = [];
+
+    if (toUpdate.length > 0) {
+        const contents = await readChangedDocs(toUpdate);
+        const allowed = new Set(Object.keys(contents));
+        const userText =
+            `changed_documents=${JSON.stringify(Object.keys(contents))}\n` +
+            `documents_content=${JSON.stringify(contents)}`;
+
+        // ── tier 3: volatile knowledge as markdown sections ──────────────
+        const factsRaw = await askLLM(await loadSkill("02b_project_knowledge_distillation.md"), userText);
+        const factValidation = validateFacts(parseJSON(factsRaw)?.facts, allowed);
+        rejectedFacts = factValidation.rejected;
+        for (const { fact, why } of rejectedFacts) {
+            console.error(`  [tier3] BỎ mục "${fact?.title ?? "(không title)"}": ${why.join("; ")}`);
+        }
+        for (const fact of factValidation.accepted) {
+            const res = await storeKnowledgeSection({
+                kind: fact.kind,
+                status: fact.status,
+                title: fact.title.trim(),
+                content: fact.content.trim(),
+                sourceFile: fact.source_file,
+                sourceHash: currentHashes[fact.source_file] ?? null,
+            });
+            sections[res.action]++;
+        }
+
+        // ── tier 2: stable reference knowledge as queryable rows ─────────
+        const refsRaw = await askLLM(await loadSkill("02c_reference_extraction.md"), userText);
+        const refValidation = validateReferences(parseJSON(refsRaw), allowed);
+        rejectedRefs = refValidation.rejected;
+        for (const { type, row } of rejectedRefs) {
+            console.error(`  [tier2] BỎ ${type} "${row?.term ?? row?.name ?? row?.key ?? "(?)"}": thiếu trường bắt buộc hoặc source_ref không hợp lệ`);
+        }
+        for (const row of refValidation.ok.terms) {
+            putTerm({ term: row.term, definition: row.definition, aliases: row.aliases ?? [], sourceRef: row.source_ref });
+            reference.terms++;
+        }
+        for (const row of refValidation.ok.components) {
+            putComponent({ name: row.name, kind: row.kind, ref: row.ref ?? null, description: row.description ?? null, sourceRef: row.source_ref });
+            reference.components++;
+        }
+        for (const row of refValidation.ok.fields) {
+            putField({ name: row.name, component: row.component ?? null, dataType: row.data_type ?? null, constraints: row.constraints ?? null, notes: row.notes ?? null, sourceRef: row.source_ref });
+            reference.fields++;
+        }
+        for (const row of refValidation.ok.config) {
+            putConfig({ key: row.key, value: row.value, description: row.description ?? null, sourceRef: row.source_ref });
+            reference.config++;
+        }
+    }
+
+    // ── Impact analysis (H.3/H.4) ─────────────────────────────────────
+    // Which knowledge sections, test cases and specs are now out of date. The SET is
+    // found deterministically from the graph; the LLM only explains it. Skipped
+    // entirely when nothing changed (added-only runs invalidate nothing downstream).
     const stamp = new Date().toISOString();
+    const impact = computeImpact({ added, changed, removed });
+    let impactReport = renderImpactReport(impact, stamp);
 
-    await runTool("write_file", {
-        path: "memory/project/domain-facts.md",
-        content: assembleProjectKnowledgeFile({
-            title: "Domain Facts — Function D (Voucher/Discount Checkout)",
-            type: "Fact / Business Context (distilled from project-docs/)",
-            content: domainFacts,
-            source: `project-docs/ — chưng cất tự động bởi qa-leader lúc ${stamp}`,
-            consumedBy: "qa-test-designer, qa-automation (cross-node, đọc trực tiếp).",
-        }),
-    });
-    await runTool("write_file", {
-        path: "memory/project/known-issues.md",
-        content: assembleProjectKnowledgeFile({
-            title: "Known Issues — Function D",
-            type: "Fact / Registry (distilled from project-docs/)",
-            content: knownIssues,
-            source: `project-docs/05_QA/ — chưng cất tự động bởi qa-leader lúc ${stamp}`,
-            consumedBy: "qa-test-designer, qa-automation, qa-reporter (cross-node, đọc trực tiếp).",
-        }),
-    });
-    await runTool("write_file", {
-        path: "memory/project/decisions-log.md",
-        content: assembleProjectKnowledgeFile({
-            title: "Decisions Log — Function D",
-            type: "Fact / Change History (distilled from project-docs/06_Communication/)",
-            content: decisionsLog,
-            source: `project-docs/06_Communication/ — chưng cất tự động bởi qa-leader lúc ${stamp}`,
-            consumedBy: "Chưa có node nào load qua index.js ở thời điểm tạo — tham chiếu con người + tương lai.",
-        }),
-    });
-    await runTool("write_file", {
-        path: manifestPath,
-        content: JSON.stringify({ projectDocsHash: currentHash, distilledAt: stamp }, null, 2),
+    if (impact.sources.length > 0) {
+        const changedDocs = await readChangedDocs(changed);
+        const explainRaw = await askLLM(await loadSkill("02d_change_impact_analysis.md"),
+            `changed_documents=${JSON.stringify(impact.sources)}\n` +
+            `documents_diff_summary=${JSON.stringify(changedDocs)}\n` +
+            `impact_data=${JSON.stringify({ total: impact.total, byKind: impact.byKind, affected: impact.affected })}`);
+        // The deterministic table stays; the explanation is appended to it, never
+        // replaces it — so a bad LLM turn cannot lose the factual part.
+        impactReport += `\n## 4. Diễn giải (LLM, dựa trên đúng danh sách trên)\n\n${explainRaw.trim()}\n`;
+    }
+
+    await runTool("write_file", { path: IMPACT_REPORT_PATH, content: impactReport });
+
+    await runTool("write_json", {
+        path: MANIFEST_PATH,
+        data: { files: currentHashes, updatedAt: stamp },
     });
 
-    return { distilled: true, hash: currentHash };
+    return {
+        updated: true,
+        changedFiles: { added, changed, removed },
+        unchangedCount,
+        sections,
+        reference,
+        rejected: { facts: rejectedFacts.length, references: rejectedRefs.length },
+        flagged,
+        impact: { total: impact.total, byKind: impact.byKind, reportFile: IMPACT_REPORT_PATH },
+    };
 }
 
 // Step 3 (skill 03) — cross-check, detect gaps/contradictions
@@ -185,7 +357,7 @@ export async function runSetup({ task, formAnswers = null }) {
 
     await step1_convert();
     await step2_classify();
-    await step2b_distillKnowledge();
+    await step2b_updateProjectKnowledge();
 
     if (!formAnswers) {
         const { hasGap, reportMarkdown } = await step3_gapCheck();

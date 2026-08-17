@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Practical AI for Manual Testers",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "models": "node agents/list-models.js",
     "testing": "node agents/testing.js",

@@ -14,7 +14,8 @@ Template-based
 ## Variables
 {{tc_id}} — TC_ID đang xử lý
 {{verifier_classification}} — nhãn + ghi chú của Verifier cho TC_ID này (từ `deliverable-verifier.md`)
-{{test_case}} — Steps/Test Data/Expected Result gốc của TC_ID này (từ `deliverable-test-designer.md`)
+{{test_case}}
+{{evidence_image}} — đường dẫn ảnh chụp màn hình sau khi chạy (đã được `index.js` kiểm tra tồn tại thật), hoặc `[không có ảnh evidence]` — Steps/Test Data/Expected Result gốc của TC_ID này (từ `deliverable-test-designer.md`)
 
 ## PROMPT
 Bạn là QA Reporter Agent. Verifier đã phân loại:
@@ -45,7 +46,8 @@ Trạng thái: DRAFT — chờ xác nhận con người trước khi coi là bug
 | Trường | Nội dung |
 |---|---|
 | Title | [CẦN BỔ SUNG: chưa đủ căn cứ đặt tên lỗi cụ thể] |
-| Environment | ShopGo checkout (https://cwshopgo.github.io), Chromium qua MCP Playwright (headless) |
+| Environment | <URL môi trường test từ cấu hình tầng 2>, Chromium qua MCP Playwright (headless) |
+| Evidence | `evidence/TC-D-004-after.jpg` |
 | Steps to Reproduce | 1. Vào checkout 2. Nhập mã SALE20 3. Bấm Áp dụng |
 | Actual Result | Không tìm thấy ô nhập mã lúc chạy test, dù ui-conventions.md ghi nhận ô này tồn tại nhất quán — [CẦN BỔ SUNG: cần chạy lại để xác nhận có phải lỗi tạm thời] |
 | Expected Result | Áp mã thành công |

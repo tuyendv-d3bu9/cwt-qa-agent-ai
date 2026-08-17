@@ -4,12 +4,18 @@
 import { readFile } from "node:fs/promises";
 import { runTool } from "../runtime/tools.js";
 import { callLLM } from "../runtime/llm.js";
+import { contextFor } from "../runtime/knowledge.js";
 import { verifyDeliverable } from "./tools/count-check.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
-const FACT = await readFile(new URL("./knowledge/fact-framework.md", import.meta.url), "utf8");
+// Tier 1 (memory/semantic/) is the ONE definition of the FACT framework. This node used
+// to load only its private file — which is not the framework at all but this node's own
+// delivery rules, despite being named fact-framework.md — so the shared definition never
+// reached the prompt while role.md claimed it did.
+const FACT = await readFile(new URL("../../memory/semantic/fact-framework.md", import.meta.url), "utf8");
+const DELIVERY_RULES = await readFile(new URL("./knowledge/delivery-rules.md", import.meta.url), "utf8");
 const CONVENTIONS = await readFile(new URL("./knowledge/requirement-analysis-conventions.md", import.meta.url), "utf8");
-const SKILLS_DIR = new URL("./skill/", import.meta.url);
+const SKILLS_DIR = new URL("./skills/", import.meta.url);
 
 async function loadSkill(fileName) {
     return readFile(new URL(fileName, SKILLS_DIR), "utf8");
@@ -17,7 +23,8 @@ async function loadSkill(fileName) {
 
 async function askLLM(skillText, userText) {
     const res = await callLLM({
-        system: [ROLE, FACT, CONVENTIONS, skillText].join("\n\n"),
+        // Tier 2 is QUERIED, not injected — see memory/README.md and knowledge.js.
+        system: [ROLE, FACT, DELIVERY_RULES, CONVENTIONS, contextFor(userText), skillText].filter(Boolean).join("\n\n"),
         contents: [{ role: "user", parts: [{ text: userText }] }],
     });
     return res.text;
@@ -71,6 +78,15 @@ async function runRevision(task) {
     const feedback = task.split("## Feedback vong").pop();
     return askLLM(skill4, `feedback=${feedback}\nprevious_deliverable=${prev.content}`);
 }
+
+// Handover contract (memory/README.md rule 3). The workflow checks `requires`
+// before calling run(), so a missing input fails here with a clear message instead
+// of deep inside an LLM call.
+export const CONTRACT = {
+    agent: "qa-analyst",
+    requires: ["memory/working/task-assignment.md"],
+    produces: ["memory/working/deliverable-analyst.md"],
+};
 
 export async function run({ taskFile }) {
     const task = await runTool("read_file", { path: taskFile });

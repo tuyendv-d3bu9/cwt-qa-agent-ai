@@ -6,7 +6,7 @@ Dùng sau `01_requirement_summary.md` — dùng framework 06W từ `memory/seman
 ## Knowledge Reference
 - `memory/semantic/06W.md` — framework 06W (6 dimension tìm missing rule).
 - `knowledge/analysis-integrity.md` — rule chỉ tạo missing rule khi source chưa xác định, không suy diễn tùy tiện.
-- `knowledge/fact-framework.md` — FACT self-check trước khi ghi deliverable.
+- `memory/semantic/fact-framework.md` — FACT self-check trước khi ghi deliverable.
 
 ## Prompt Type
 Chain-of-thought + 06W
@@ -34,7 +34,7 @@ requirement_summary = "... BUSINESS RULES: 1. Mỗi đơn áp tối đa 1 vouche
 ```
 
 ## Quality Check
-> Áp dụng FACT self-check từ `knowledge/fact-framework.md` trước khi ghi deliverable.
+> Áp dụng FACT self-check từ `memory/semantic/fact-framework.md` trước khi ghi deliverable.
 > Áp dụng rule missing rule từ `memory/semantic/06W.md` và `knowledge/analysis-integrity.md`.
 
 - **Faithful** (xem `knowledge/analysis-integrity.md`): chỉ nêu rule thực sự thiếu, không suy diễn quá xa khỏi domain.

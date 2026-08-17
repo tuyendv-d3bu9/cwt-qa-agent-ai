@@ -5,8 +5,8 @@
 
 ## Responsibilities
 - Đọc `memory/working/deliverable-test-designer.md` — lấy toàn bộ test case đã có TC_ID (bỏ qua mục "Chưa thể tạo test case (chờ OPEN QUESTION)").
-- Với mỗi test case: điều hướng tới `https://cwshopgo.github.io` (checkout không cần login — xem `memory/project/domain-facts.md`), THỰC THI đúng Steps của test case qua MCP thật trước khi chụp snapshot (skill `00_step_navigator.md` — sửa lỗi đã biết: trước đây chỉ chụp snapshot ở URL gốc, không chạy Steps, khiến test case nhiều bước bị explore sai trạng thái trang).
-- Sau khi đã ở đúng trạng thái, explore DOM thật để lấy selector (skill `01_dom_explore.md`), chỉ dùng MCP 1 lần lúc authoring cho mỗi test case.
+- Với mỗi test case: điều hướng tới URL môi trường test lấy từ cấu hình tầng 2 (`base_url`, đọc qua `agents/runtime/knowledge.js` — KHÔNG viết cứng URL trong code hay tài liệu, xem `memory/README.md`), THỰC THI đúng Steps của test case qua MCP thật trước khi chụp snapshot (skill `00_step_navigator.md` — sửa lỗi đã biết: trước đây chỉ chụp snapshot ở URL gốc, không chạy Steps, khiến test case nhiều bước bị explore sai trạng thái trang).
+- Sau khi đã ở đúng trạng thái, explore UI thật: locator do `browser_generate_locator` của Playwright sinh, lưu vào `tools/ui-element-registry.js` để **explore một lần dùng cho mọi test case**; skill `01_exploratory_ui_discovery.md` chỉ xử lý phần cần phán đoán + phát hiện lệch spec-vs-UI. MCP chỉ dùng lúc authoring, KHÔNG dùng lúc chạy spec.
 - Sinh Playwright `.spec.ts` tĩnh từ Steps/Test Data/Expected Result + DOM snapshot vừa explore (skill `02_spec_generator.md`), ghi vào `tests/<TC_ID>.spec.ts`.
 - Sau khi explore xong, ghi lại pattern UI thật quan sát được (không suy đoán) vào `memory/working/ui-conventions.md` (skill `03_ui_conventions_writer.md`) — dùng làm baseline oracle cho QA Verifier sau này.
 - Tuân thủ nguyên tắc **Generate Once, Run Many** (`knowledge/generate-once-run-many.md`): MCP chỉ gọi trong bước sinh script, KHÔNG gọi lại khi `.spec.ts` chạy sau này.
@@ -31,7 +31,7 @@
 | # | Skill | Dùng khi nào |
 | --- | --- | --- |
 | 00 | `00_step_navigator.md` | Cho MỖI bước trong Steps của test case, TRƯỚC skill 01 — đưa trang về đúng trạng thái Steps mô tả, chỉ dùng tool MCP thật lấy từ `mcpClient.listTools()` |
-| 01 | `01_dom_explore.md` | Sau khi đã thực thi xong Steps — explore DOM thật qua MCP Playwright để lấy selector |
+| 01 | `01_exploratory_ui_discovery.md` | Sau khi đã thực thi xong Steps — khớp khái niệm nghiệp vụ với phần tử thật khi tên mơ hồ, và **phát hiện lệch giữa spec và UI thật**. KHÔNG tự viết selector (việc của `browser_generate_locator`) |
 | 02 | `02_spec_generator.md` | Ngay sau 01 — sinh `.spec.ts` tĩnh từ DOM snapshot + test case |
 | 03 | `03_ui_conventions_writer.md` | Sau khi explore xong toàn bộ test case — tổng hợp `memory/working/ui-conventions.md` |
 
@@ -41,9 +41,12 @@ Chưa có skill revision — node này hiện single-shot, cùng quyết định
 - `spec-assertion-check.js`: kiểm tra deterministic, KHÔNG dùng LLM — mỗi `.spec.ts` sinh ra phải có ít nhất 1 `expect()` không tầm thường (không phải `expect(true).toBe(true)`), không có spec nào chỉ chụp screenshot mà không assert, tên test phải chứa TC_ID. Kết quả ghi vào "Self Count Check" của `deliverable-automation.md`, cùng vai trò với `count-check.js` (qa-analyst) và `coverage-check.js` (qa-test-designer).
 
 ## Knowledge Referenced
+- **Kiến trúc memory**: xem `memory/README.md` — định nghĩa chuẩn 5 tầng + hợp đồng handover của cả pipeline. File `role.md` này KHÔNG định nghĩa lại tầng memory, chỉ liệt kê node này đọc gì.
 - Private (agents/qa-automation/knowledge/): `generate-once-run-many.md` (MCP chỉ dùng lúc authoring), `oracle-problem.md` (explore-then-freeze, screenshot không phải verdict), `playwright-conventions.md` (naming file spec/evidence, ưu tiên selector role/label/test-id)
 - Shared (memory/semantic/): `fact-framework.md`
-- Project (memory/project/ — tri thức dự án đã chưng cất, dùng chung nhiều node): `domain-facts.md` (Function D, URL app, fact không cần login), `known-issues.md` (bug đã biết)
+- Project (tầng 3 — `memory/project/`): `domain-facts.md` (fact nghiệp vụ của tính năng đang test), `known-issues.md` (bug đã biết)
+- Tham chiếu (tầng 2, `memory/project/knowledge.db`): thuật ngữ / thành phần / field + ràng buộc / cấu hình dự án — **KHÔNG nạp cả vào prompt**, chỉ tra đúng mục liên quan tới việc đang làm qua `contextFor()` của `agents/runtime/knowledge.js`.
+  - Trong đó `base_url` là **bắt buộc**: node này lấy URL môi trường test từ đây, KHÔNG viết cứng. Thiếu `base_url` thì node dừng hẳn với thông báo rõ, không tự fallback sang URL nào khác.
 
 ## Input/Output contract
 - Input received from (who calls, what format): gọi qua function call `run({ testCaseFile })`, `testCaseFile` luôn là `memory/working/deliverable-test-designer.md`. Automation tự `read_file` để lấy nội dung.

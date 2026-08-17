@@ -10,23 +10,27 @@
 // This flow has TWO points where it must stop and hand control back to a human,
 // by design (not a gap — see agents/qa-automation/role.md and qa-verifier/role.md):
 //   1. Before QA Automation runs — it calls REAL MCP Playwright against the live
-//      site (https://cwshopgo.github.io). Requires --confirm-mcp every time.
+//      site configured as tier-2 "base_url". Requires --confirm-mcp every time.
 //   2. After QA Automation, before QA Verifier — a human/CI must run
 //      `npx playwright test --reporter=json` themselves; no agent runs tests.
 //
 // Run:
-//   node workflow/flow-3-design-automate-verify-report.js --confirm-mcp [reportTypes]
+//   node workflow/flow-3-design-automate-verify-report.js --confirm-mcp [--vlm-all] [reportTypes]
+//   --vlm-all: soi ảnh mọi test case (mặc định chỉ soi test fail + test pass High/Critical)
 //   reportTypes: comma-separated, e.g. "daily,narrative" (default if verdict PASS).
 //   Bug reports are NOT auto-generated here — verdict ASK means a human must
 //   review memory/working/deliverable-verifier.md first; run qa-reporter with
 //   reportTypes including "bug" yourself once you've confirmed real bugs.
 
-import { access, unlink } from "node:fs/promises";
-import { run as runTestDesigner } from "../agents/qa-test-designer/index.js";
-import { run as runAutomation } from "../agents/qa-automation/index.js";
-import { run as runVerifier } from "../agents/qa-verifier/index.js";
-import { run as runReporter } from "../agents/qa-reporter/index.js";
+import { runTool } from "../agents/runtime/tools.js";
+import { run as runTestDesigner, CONTRACT as DESIGNER_CONTRACT } from "../agents/qa-test-designer/index.js";
+import { run as runAutomation, CONTRACT as AUTOMATION_CONTRACT } from "../agents/qa-automation/index.js";
+import { run as runVerifier, CONTRACT as VERIFIER_CONTRACT } from "../agents/qa-verifier/index.js";
+import { run as runReporter, CONTRACT as REPORTER_CONTRACT } from "../agents/qa-reporter/index.js";
 import { loadState, markStep } from "../agents/runtime/memory.js";
+import { initDatabases } from "../agents/runtime/db.js";
+import { getConfig } from "../agents/runtime/knowledge.js";
+import { requireInputs, verifyProduced } from "../agents/runtime/handover.js";
 
 const TASK_FILE = "memory/working/task-assignment.md";
 const ANALYST_DELIVERABLE = "memory/working/deliverable-analyst.md";
@@ -36,11 +40,23 @@ const UI_CONVENTIONS_FILE = "memory/working/ui-conventions.md";
 
 const args = process.argv.slice(2);
 const confirmMcp = args.includes("--confirm-mcp");
+// Soi ảnh MỌI test case thay vì chỉ test fail + test pass High/Critical (quyết định J.6).
+// Đắt hơn, nên mặc định tắt; bật khi cần soi kỹ toàn bộ.
+const vlmAll = args.includes("--vlm-all");
 const reportTypesArg = args.find(a => !a.startsWith("--"));
 const reportTypes = reportTypesArg ? reportTypesArg.split(",").map(s => s.trim()) : ["daily", "narrative"];
 
+// Goes through the tool registry (agents/runtime/tools.js) rather than fs.access(),
+// so "does this exist?" is asked exactly one way everywhere in the repo.
 async function fileExists(path) {
-    try { await access(path); return true; } catch { return false; }
+    const res = await runTool("file_exists", { path });
+    return res.exists === true;
+}
+
+// Create/migrate the databases before any agent runs (same reason as in flow-2:
+// explicit at run start, not lazily whenever some code path first touches them).
+for (const { path, created } of initDatabases()) {
+    if (created) console.log(`Created ${path}`);
 }
 
 const state = await loadState();
@@ -57,9 +73,17 @@ if (analystStep?.status !== "done") {
 let designerStep = stepFor("qa-test-designer");
 if (designerStep?.status !== "done") {
     console.log("[1/4] Running QA Test Designer…");
+    // Handover rule 3 (memory/README.md): declared inputs are checked BEFORE the node
+    // runs, so a missing upstream file fails here instead of mid-LLM-call.
+    await requireInputs(DESIGNER_CONTRACT);
     const out = await runTestDesigner({ taskFile: TASK_FILE, deliverableFile: ANALYST_DELIVERABLE });
     if (out.status !== "success") {
         console.error("QA Test Designer error:", out);
+        process.exit(1);
+    }
+    const producedDesigner = await verifyProduced(DESIGNER_CONTRACT);
+    if (!producedDesigner.ok) {
+        console.error(`QA Test Designer báo success nhưng KHÔNG ghi output đã khai: ${producedDesigner.missing.join(", ")}`);
         process.exit(1);
     }
     await markStep("qa-test-designer", { status: "done", output: TEST_DESIGNER_DELIVERABLE });
@@ -76,7 +100,7 @@ if (needsAutomationRun) {
     if (!confirmMcp) {
         console.log(
             "\n>> QA Automation cần chạy — bước này gọi MCP Playwright THẬT, mở trình duyệt " +
-            "thật tới https://cwshopgo.github.io để explore DOM (agents/qa-automation/role.md).\n" +
+            `thật tới ${getConfig("base_url", "(chưa cấu hình base_url ở tầng 2)")} để explore DOM (agents/qa-automation/role.md).\n` +
             "   Đây là hành động ra bên ngoài thật, cần xác nhận tường minh mỗi lần.\n" +
             "   Chạy lại với flag --confirm-mcp nếu bạn đồng ý cho phép bước này chạy:\n" +
             "   node workflow/flow-3-design-automate-verify-report.js --confirm-mcp\n"
@@ -87,11 +111,12 @@ if (needsAutomationRun) {
     // Re-running after a verifier FIX means the old test-results.json (if any)
     // was measured against the OLD spec — stale, must not be reused for re-verify.
     if (await fileExists(TEST_RESULTS_FILE)) {
-        await unlink(TEST_RESULTS_FILE);
+        await runTool("delete_file", { path: TEST_RESULTS_FILE });
         console.log(`  Đã xoá ${TEST_RESULTS_FILE} cũ (spec sẽ được sinh lại — kết quả cũ không còn hợp lệ).`);
     }
 
     console.log("[2/4] Running QA Automation (real MCP Playwright)…");
+    await requireInputs(AUTOMATION_CONTRACT);
     const out = await runAutomation({ testCaseFile: TEST_DESIGNER_DELIVERABLE });
     if (out.status !== "success") {
         console.error("QA Automation error:", out);
@@ -117,16 +142,19 @@ if (!(await fileExists(TEST_RESULTS_FILE))) {
 
 // ── Step: QA Verifier ────────────────────────────────────────────
 console.log("[3/4] Running QA Verifier…");
+await requireInputs(VERIFIER_CONTRACT);
 const verifierOut = await runVerifier({
     testResultsFile: TEST_RESULTS_FILE,
     uiConventionsFile: UI_CONVENTIONS_FILE,
     testCaseFile: TEST_DESIGNER_DELIVERABLE,
+    vlmAll,
 });
 if (verifierOut.status !== "success") {
     console.error("QA Verifier error:", verifierOut);
     process.exit(1);
 }
-console.log(`  Verdict: ${verifierOut.data.verdict}`);
+console.log(`  Verdict: ${verifierOut.data.verdict} (soi ảnh ${verifierOut.data.visionAnalysed} test case, bỏ qua ${verifierOut.data.visionSkipped}${vlmAll ? "" : " — dùng --vlm-all để soi hết"})`);
+for (const n of verifierOut.data.notes ?? []) console.warn(`  [verifier] ${n}`);
 
 if (verifierOut.data.verdict === "ASK") {
     // qa-verifier/index.js already calls markStep("qa-verifier", {status: "waiting_ask", ...}).
@@ -153,6 +181,7 @@ await markStep("qa-verifier", { status: "done", output: verifierOut.data.deliver
 
 // ── Step: QA Reporter ─────────────────────────────────────────────
 console.log(`[4/4] Running QA Reporter (reportTypes=${JSON.stringify(reportTypes)})…`);
+await requireInputs(REPORTER_CONTRACT);
 const reporterOut = await runReporter({
     reportTypes,
     verifierDeliverableFile: verifierOut.data.deliverableFile,

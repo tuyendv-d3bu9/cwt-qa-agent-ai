@@ -6,7 +6,7 @@ Dùng đầu tiên khi QA Analyst nhận task từ Leader (qua `memory/working/t
 ## Knowledge Reference
 - `knowledge/requirement-summary.md` — schema 7 phần chuẩn và rule tổng hợp requirement.
 - `knowledge/analysis-integrity.md` — source integrity rules, traceability và boundary.
-- `knowledge/fact-framework.md` — FACT self-check trước khi ghi deliverable.
+- `memory/semantic/fact-framework.md` — FACT self-check trước khi ghi deliverable.
 
 ## Prompt Type
 Chain-of-thought
@@ -45,10 +45,10 @@ Cho phép user áp mã voucher tại bước checkout để giảm giá đơn h�
 ```
 
 ## Quality Check
-> Áp dụng FACT self-check từ `knowledge/fact-framework.md` trước khi ghi deliverable.
+> Áp dụng FACT self-check từ `memory/semantic/fact-framework.md` trước khi ghi deliverable.
 
 - **Faithful** (xem `knowledge/analysis-integrity.md`): không suy diễn ngoài những gì tài liệu có, mọi giả định đều gắn `[GIẢ ĐỊNH]`.
 - **Accurate**: điều kiện và business rule phải chính xác theo nguồn, không tự chọn khi 2 nguồn mâu thuẫn.
 - **Complete** (xem `knowledge/requirement-summary.md`): đủ 7 phần; phần 7 (Open Questions) không được bỏ trống nếu phát hiện mâu thuẫn.
-- **Testable** (xem `knowledge/fact-framework.md`): mỗi business rule phải có thể kiểm chứng bằng source hoặc test case cụ thể.
+- **Testable** (xem `memory/semantic/fact-framework.md`): mỗi business rule phải có thể kiểm chứng bằng source hoặc test case cụ thể.
 - **Traceable** (xem `knowledge/analysis-integrity.md`): mỗi business rule nên chỉ rõ trích từ file nào khi có thể.

@@ -1,13 +1,20 @@
 // agents/qa-verifier/index.js
-// Node: QA Verifier — matches real .spec.ts run results against the frozen
-// ui-conventions.md oracle and Test Designer's Expected Result, decides
-// PASS/FIX/ASK. Never runs tests itself, never invents the oracle.
+// Node: QA Verifier — decides PASS/FIX/ASK from TWO channels:
+//
+//   functional  expect() results in test-results.json  -> the ONLY source of pass/fail
+//   visual      evidence/<TC_ID>-after.jpg read by a VLM -> WHY it failed, and whether a
+//               green assertion is hiding a broken screen (false-green)
+//
+// The combination is deterministic (tools/verdict-combiner.js), not an LLM judgement:
+// see agents/qa-automation/knowledge/oracle-problem.md — an image may only downgrade a
+// conclusion, never upgrade one. Never runs the tests itself, never invents the oracle.
 
 import { readFile } from "node:fs/promises";
 import { runTool } from "../runtime/tools.js";
-import { callLLM } from "../runtime/llm.js";
+import { callLLM, callVisionLLM } from "../runtime/llm.js";
 import { markStep } from "../runtime/memory.js";
 import { parseTestResults, groupByTcId } from "./tools/parse-test-results.js";
+import { combine, deriveVerdict, selectForVision, LABELS } from "./tools/verdict-combiner.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
 const FACT = await readFile(new URL("../../memory/semantic/fact-framework.md", import.meta.url), "utf8");
@@ -16,31 +23,115 @@ const UI_BASELINE_RULE = await readFile(new URL("./knowledge/ui-conventions-base
 const CHECKPOINT = await readFile(new URL("./knowledge/checkpoint-protocol.md", import.meta.url), "utf8");
 // Cross-node knowledge — read directly, not copied (see role.md "Cross-node").
 const RISK_TAXONOMY = await readFile(new URL("../qa-leader/knowledge/task-management-conventions.md", import.meta.url), "utf8");
+const ORACLE_BOUNDARY = await readFile(new URL("../qa-automation/knowledge/oracle-problem.md", import.meta.url), "utf8");
 const SKILLS_DIR = new URL("./skills/", import.meta.url);
+
+const DELIVERABLE_FILE = "memory/working/deliverable-verifier.md";
 
 async function loadSkill(fileName) {
     return readFile(new URL(fileName, SKILLS_DIR), "utf8");
 }
 
 async function askLLM(skillText, userText) {
-    const system = [ROLE, FACT, VERDICT_MAPPING, UI_BASELINE_RULE, CHECKPOINT, RISK_TAXONOMY, skillText].join("\n\n");
+    const system = [ROLE, FACT, VERDICT_MAPPING, UI_BASELINE_RULE, ORACLE_BOUNDARY, CHECKPOINT, RISK_TAXONOMY, skillText].join("\n\n");
     const res = await callLLM({ system, contents: [{ role: "user", parts: [{ text: userText }] }] });
     return res.text;
 }
 
-/** Look up Expected Result for a TC_ID from the 8-field test case table */
-function findExpectedResult(testCaseMarkdown, tcId) {
-    const row = testCaseMarkdown.split("\n").find(l => l.trim().startsWith("|") && l.includes(tcId));
+function parseJSON(raw) {
+    const cleaned = String(raw ?? "").replace(/^```[\w]*\n?/m, "").replace(/```\s*$/m, "").trim();
+    try {
+        return JSON.parse(cleaned);
+    } catch {
+        return null;
+    }
+}
+
+/** Look up one column of a TC row in the 8-field test case table. */
+function findCell(testCaseMarkdown, tcId, index) {
+    const row = String(testCaseMarkdown ?? "").split("\n").find(l => l.trim().startsWith("|") && l.includes(tcId));
     if (!row) return null;
     const cells = row.split("|").map(c => c.trim()).filter((_, i, arr) => i > 0 && i < arr.length - 1);
-    return cells[5] || null; // TC_ID, Title, Precondition, Steps, Test Data, Expected Result, Priority, Tags
+    return cells[index] ?? null;
 }
 
-function assembleDeliverable(verdictReport) {
-    return `# Deliverable — QA Verifier\n\n${verdictReport}\n`;
+// TC_ID, Title, Precondition, Steps, Test Data, Expected Result, Priority, Tags
+const findExpectedResult = (md, tcId) => findCell(md, tcId, 5);
+const findPriority = (md, tcId) => findCell(md, tcId, 6);
+
+/**
+ * Run the visual channel for one test case.
+ * Returns visual=null when there is no usable image — which the combiner maps to UNCLEAR,
+ * never to agreement. A missing screenshot must not look like confirmation.
+ */
+async function analyseScreenshot({ tcId, expectedResult, uiConventions, skill }) {
+    const imagePath = `evidence/${tcId}-after.jpg`;
+    const exists = await runTool("file_exists", { path: imagePath });
+    if (!exists.exists) return { visual: null, note: `không có ${imagePath}` };
+
+    try {
+        const res = await callVisionLLM({
+            system: [ROLE, ORACLE_BOUNDARY, VERDICT_MAPPING, skill].join("\n\n"),
+            text: `tc_id=${tcId}\nexpected_result=${expectedResult ?? "[không tìm thấy trong bảng test case]"}\nui_conventions=${uiConventions}`,
+            images: [imagePath],
+        });
+        const visual = parseJSON(res.text);
+        if (!visual) return { visual: null, note: `VLM trả về JSON không parse được cho ${tcId}` };
+        return { visual, note: null, imagePath };
+    } catch (err) {
+        // Reading/sending the image failed — report it, do not silently treat as pass.
+        return { visual: null, note: `lỗi khi phân tích ảnh ${imagePath}: ${err.message}` };
+    }
 }
 
-export async function run({ testResultsFile, uiConventionsFile, testCaseFile }) {
+function assembleDeliverable({ verdict, analysed, visionSkipped, notes, narrative }) {
+    const rows = analysed.map(a =>
+        `| ${a.tcId} | ${a.status} | ${a.label} | ${a.channel} | ${String(a.reason).replace(/\|/g, "\\|")} | ${a.imagePath ? `\`${a.imagePath}\`` : "—"} |`
+    ).join("\n");
+
+    const counts = {};
+    for (const a of analysed) counts[a.label] = (counts[a.label] ?? 0) + 1;
+
+    const skippedSection = visionSkipped.length
+        ? visionSkipped.map(s => `- ${s.tcId}: ${s.why}`).join("\n")
+        : "*Mọi test case đều đã được soi ảnh.*";
+
+    const notesSection = notes.length ? notes.map(n => `- ${n}`).join("\n") : "*Không có.*";
+
+    return (
+        `# Deliverable — QA Verifier\n\n` +
+        `## Verdict: ${verdict}\n\n` +
+        `Verdict này do \`tools/verdict-combiner.js\` suy ra **deterministic** từ nhãn của từng test case ` +
+        `(KHÔNG phải do LLM tự kết luận). Quy tắc: có \`UNCLEAR\` hoặc \`BEHAVIOR_MISMATCH\` → ASK; ` +
+        `chỉ có \`SPEC_ISSUE\` → FIX; còn lại → PASS.\n\n` +
+        `## 1. Phân loại từng test case\n\n` +
+        `| TC_ID | expect() | Nhãn | Kênh dùng | Lý do | Ảnh evidence |\n|---|---|---|---|---|---|\n` +
+        `${rows || "| — | — | — | — | *không có kết quả nào* | — |"}\n\n` +
+        `Tổng: ${Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(", ") || "0"}\n\n` +
+        `## 2. Test case KHÔNG được soi ảnh (tiết kiệm chi phí VLM)\n\n${skippedSection}\n\n` +
+        `> Những test case này chỉ được kết luận bằng kênh \`expect()\`. Cần soi hết thì chạy lại với \`--vlm-all\`.\n\n` +
+        `## 3. Ghi chú kỹ thuật (ảnh thiếu / VLM lỗi)\n\n${notesSection}\n\n` +
+        `## 4. Diễn giải\n\n${narrative}\n`
+    );
+}
+
+// Handover contract — see memory/README.md rule 3.
+export const CONTRACT = {
+    agent: "qa-verifier",
+    requires: [
+        "memory/working/test-results.json",
+        "memory/working/ui-conventions.md",
+        "memory/working/deliverable-test-designer.md",
+    ],
+    produces: [DELIVERABLE_FILE],
+};
+
+/**
+ * @param {{testResultsFile: string, uiConventionsFile: string, testCaseFile: string, vlmAll?: boolean}} opts
+ *   vlmAll — analyse the screenshot of EVERY test case, not just failures and
+ *   High/Critical passes (decision J.6).
+ */
+export async function run({ testResultsFile, uiConventionsFile, testCaseFile, vlmAll = false }) {
     const uiConventions = await runTool("read_file", { path: uiConventionsFile });
     if (uiConventions.error) {
         return { status: "error", data: null, error: `ui-conventions.md chưa tồn tại — QA Automation phải chạy trước. (${uiConventions.error})` };
@@ -52,36 +143,92 @@ export async function run({ testResultsFile, uiConventionsFile, testCaseFile }) 
     }
 
     const testCaseDeliverable = await runTool("read_file", { path: testCaseFile });
-    const parsed = parseTestResults(JSON.parse(testResultsRaw.content));
+    let parsed;
+    try {
+        parsed = parseTestResults(JSON.parse(testResultsRaw.content));
+    } catch (err) {
+        return { status: "error", data: null, error: `test-results.json không parse được: ${err.message}` };
+    }
     const grouped = groupByTcId(parsed);
 
-    const skill1 = await loadSkill("01_test_result_analysis.md");
-    const analyzed = [];
+    // Flatten, attaching Priority so the vision-cost guard can use it.
+    const flat = [];
     for (const [tcId, results] of Object.entries(grouped)) {
         for (const result of results) {
-            if (result.status === "passed") {
-                analyzed.push({ ...result, tcId, label: "PASSED" });
-                continue;
-            }
-            const expectedResult = findExpectedResult(testCaseDeliverable.content, tcId);
-            const label = await askLLM(skill1,
-                `failed_test=${JSON.stringify(result)}\nui_conventions=${uiConventions.content}\nexpected_result=${expectedResult}`);
-            analyzed.push({ ...result, tcId, label });
+            flat.push({
+                ...result,
+                tcId,
+                priority: findPriority(testCaseDeliverable.content, tcId),
+                expectedResult: findExpectedResult(testCaseDeliverable.content, tcId),
+            });
         }
     }
 
-    const skill2 = await loadSkill("02_verdict_writer.md");
-    const verdictReport = await askLLM(skill2, `all_results=${JSON.stringify(analyzed)}`);
-    const verdictMatch = /## Verdict:\s*(PASS|FIX|ASK)/i.exec(verdictReport);
-    const verdict = verdictMatch ? verdictMatch[1].toUpperCase() : "ASK"; // never silently assume PASS if unparseable
+    const { wanted, skipped: visionSkipped } = selectForVision(flat, { all: vlmAll });
+    const wantedKeys = new Set(wanted.map(r => `${r.tcId}::${r.title ?? ""}`));
 
-    await runTool("write_file", { path: "memory/working/deliverable-verifier.md", content: assembleDeliverable(verdictReport) });
+    const visionSkill = await loadSkill("03_screenshot_analysis.md");
+    const analysed = [];
+    const notes = [];
 
-    if (verdict === "ASK") {
-        await markStep("qa-verifier", { status: "waiting_ask", output: "memory/working/deliverable-verifier.md" });
-    } else {
-        await markStep("qa-verifier", { status: "done", output: "memory/working/deliverable-verifier.md" });
+    for (const result of flat) {
+        let visual = null;
+        let imagePath = null;
+
+        if (wantedKeys.has(`${result.tcId}::${result.title ?? ""}`)) {
+            const out = await analyseScreenshot({
+                tcId: result.tcId,
+                expectedResult: result.expectedResult,
+                uiConventions: uiConventions.content,
+                skill: visionSkill,
+            });
+            visual = out.visual;
+            imagePath = out.imagePath ?? null;
+            if (out.note) notes.push(`${result.tcId}: ${out.note}`);
+        }
+
+        // Deterministic — the image cannot turn a failure into a pass.
+        const { label, reason, channel } = combine(result, visual);
+        analysed.push({ tcId: result.tcId, status: result.status, label, reason, channel, imagePath, visual, priority: result.priority });
     }
 
-    return { status: "success", data: { deliverableFile: "memory/working/deliverable-verifier.md", verdict }, error: null };
+    const verdict = deriveVerdict(analysed.map(a => a.label));
+
+    // The LLM writes the explanation only. The verdict is already fixed above, so a
+    // differently-worded report cannot change what the workflow does next.
+    const narrative = await askLLM(await loadSkill("02_verdict_writer.md"),
+        `verdict_deterministic=${verdict}\n` +
+        `labelled_results=${JSON.stringify(analysed.map(({ visual, ...rest }) => ({
+            ...rest,
+            visual_summary: visual
+                ? { matches_expected: visual.matches_expected, mismatch_details: visual.mismatch_details, ui_anomalies: visual.ui_anomalies, confidence: visual.confidence }
+                : null,
+        })))}\n` +
+        `KHÔNG được đổi verdict — chỉ diễn giải verdict đã cho.`);
+
+    await runTool("write_file", {
+        path: DELIVERABLE_FILE,
+        content: assembleDeliverable({ verdict, analysed, visionSkipped, notes, narrative }),
+    });
+
+    if (verdict === "ASK") {
+        await markStep("qa-verifier", { status: "waiting_ask", output: DELIVERABLE_FILE });
+    } else {
+        await markStep("qa-verifier", { status: "done", output: DELIVERABLE_FILE });
+    }
+
+    return {
+        status: "success",
+        data: {
+            deliverableFile: DELIVERABLE_FILE,
+            verdict,
+            labels: analysed.map(a => ({ tcId: a.tcId, label: a.label, imagePath: a.imagePath })),
+            visionAnalysed: analysed.filter(a => a.visual).length,
+            visionSkipped: visionSkipped.length,
+            notes,
+        },
+        error: null,
+    };
 }
+
+export { LABELS };

@@ -16,7 +16,7 @@
 ## Can
 - Đọc `memory/working/task-assignment.md` và `memory/working/deliverable-analyst.md`.
 - Ghi (ghi đè) `memory/working/deliverable-test-designer.md`.
-- Đọc trực tiếp (không copy) knowledge riêng của node khác khi đã được xác nhận dùng chung: `agents/qa-analyst/knowledge/viewpoint-library.md`, `agents/qa-leader/knowledge/task-management-conventions.md`, `memory/project/domain-facts.md`, `memory/project/known-issues.md`, `memory/project/glossary.md`.
+- Đọc trực tiếp (không copy) knowledge riêng của node khác khi đã được xác nhận dùng chung: `agents/qa-analyst/knowledge/viewpoint-library.md`, `agents/qa-leader/knowledge/task-management-conventions.md`, `memory/project/domain-facts.md`, `memory/project/known-issues.md`, `memory/semantic/testing-conventions.md`.
 
 ## Can't
 - Không tự phân tích lại requirement hoặc tạo thêm missing rule mới — đó là việc của QA Analyst.
@@ -38,9 +38,12 @@ Chưa có skill revision (dạng `04_revise_on_feedback.md` của qa-analyst) �
 - `coverage-check.js`: kiểm tra deterministic, KHÔNG dùng LLM — (a) mọi viewpoint/test idea trong `deliverable-analyst.md` có ít nhất 1 TC_ID tương ứng, không bị bỏ sót; (b) TC_ID duy nhất và đúng thứ tự theo quy ước `TC-D-<nnn>`; (c) mỗi test case có đủ 8 trường, không trường nào rỗng. Kết quả ghi vào mục "Self Count Check" của deliverable, cùng vai trò với `count-check.js` của qa-analyst.
 
 ## Knowledge Referenced
+- **Kiến trúc memory**: xem `memory/README.md` — định nghĩa chuẩn 5 tầng + hợp đồng handover của cả pipeline. File `role.md` này KHÔNG định nghĩa lại tầng memory, chỉ liệt kê node này đọc gì.
 - Private (agents/qa-test-designer/knowledge/): `framework-definitions.md` (RCTFC/06W/FACT — 3 mục đích khác nhau, không gộp lẫn), `boundary-coverage-conventions.md` (technique selection theo field type — quy ước testing riêng của node này, KHÔNG phải project knowledge nên không chuyển sang `memory/project/`)
 - Shared (memory/semantic/): `fact-framework.md` (Faithful/Accurate/Complete/Testable — tự kiểm trước khi ghi deliverable), `06W.md` (framework tìm missing rule — tham chiếu để hiểu vì sao 1 hạng mục trong `deliverable-analyst.md` được đánh dấu missing rule, không dùng để tự tìm missing rule mới)
-- Project (memory/project/ — tri thức dự án đã chưng cất từ `project-docs/`, dùng chung nhiều node, KHÔNG copy riêng): `domain-facts.md` (Function D, contradiction đã cài trong input), `known-issues.md` (bug đã biết, dùng để đánh dấu regression), `glossary.md` (TC_ID convention, Priority levels, phân biệt `role.md` vs field `role:` — file này không được chưng cất từ `project-docs/`, xem lưu ý đầu file)
+- Project (tầng 3 — `memory/project/`, tri thức dự án đổi thường xuyên, người sửa tay được, KHÔNG copy riêng): `domain-facts.md` (fact nghiệp vụ + contradiction đã biết trong tài liệu nguồn), `known-issues.md` (bug đã biết, dùng để đánh dấu regression)
+- Shared bổ sung (tầng 1 — `memory/semantic/`): `testing-conventions.md` (định dạng TC_ID `TC-<F>-<nnn>`, thang Priority test case, 8 trường chuẩn, phân biệt `role.md` vs field `role:`) — chuyển từ `memory/project/glossary.md` (đã xoá) sang tầng 1 vì là quy ước nghề, đúng với mọi dự án
+- Tham chiếu (tầng 2, `memory/project/knowledge.db`): thuật ngữ / thành phần / field + ràng buộc / cấu hình dự án — **KHÔNG nạp cả vào prompt**, chỉ tra đúng mục liên quan tới việc đang làm qua `contextFor()` của `agents/runtime/knowledge.js`.
 - Cross-node (đọc trực tiếp, KHÔNG copy — theo quyết định single-source, tránh nhân bản như 3 bản `fact-framework.md` hiện có trong repo): `agents/qa-analyst/knowledge/viewpoint-library.md` (8 viewpoint + cách chọn), `agents/qa-leader/knowledge/task-management-conventions.md` mục 3 (ma trận Likelihood × Impact)
 
 ## Input/Output contract

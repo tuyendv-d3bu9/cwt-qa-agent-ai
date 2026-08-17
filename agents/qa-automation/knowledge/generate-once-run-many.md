@@ -12,7 +12,7 @@ Convention / Architecture Principle
 - **Determinism**: LLM có thể trả lời khác nhau giữa các lần gọi dù cùng input — test suite cần kết quả lặp lại được (reproducible), không phụ thuộc việc model "đổi ý" giữa các lần chạy CI.
 - **Chi phí**: mỗi lần chạy CI không nên tốn thêm token/API call.
 
-**Rule cứng**: Khi `.spec.ts` fail lúc chạy (ví dụ selector không tìm thấy do UI đổi), KHÔNG tự "vá nhanh" bằng cách gọi AI ngay trong lúc test đang chạy. Phải quay lại pha authoring — chạy lại `01_dom_explore.md` + `02_spec_generator.md` để explore DOM mới rồi sinh lại spec — không vá tạm lúc runtime.
+**Rule cứng**: Khi `.spec.ts` fail lúc chạy (ví dụ selector không tìm thấy do UI đổi), KHÔNG tự "vá nhanh" bằng cách gọi AI ngay trong lúc test đang chạy. Phải quay lại pha authoring — chạy lại `01_exploratory_ui_discovery.md` + `02_spec_generator.md` để explore DOM mới rồi sinh lại spec — không vá tạm lúc runtime.
 
 ## Source
 Thiết kế QA Automation.

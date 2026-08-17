@@ -36,8 +36,10 @@
 - `count-check.js`: đếm deterministic số missing rule / viewpoint / test idea trong output trước khi ghi deliverable — KHÔNG dùng LLM. Kết quả được ghi thẳng vào mục "Self Count Check" của deliverable, để Leader nhìn thấy khi review theo FACT (tiêu chí Complete), thay vì tin số liệu do LLM tự báo cáo.
 
 ## Knowledge Referenced
-- Private (agents/qa-analyst/knowledge/): `requirement-analysis-conventions.md` (7-phần summary template, 8-viewpoint library — đúc từ Module 2; framework 6W nay tham chiếu từ `memory/semantic/06W.md`, không còn là private của node này)
-- Shared (memory/semantic/): `fact-framework.md` (khung FACT dùng chung với Leader — Analyst tự chấm trước khi nộp để giảm vòng FIX), `06W.md` (framework tìm missing rule — promote từ private lên shared vì qa-test-designer và các node sau cũng cần đọc), `shopgo-context.md` — `[GIẢ ĐỊNH]` như đã ghi chú ở role.md của Leader.
+- **Kiến trúc memory**: xem `memory/README.md` — định nghĩa chuẩn 5 tầng + hợp đồng handover của cả pipeline. File `role.md` này KHÔNG định nghĩa lại tầng memory, chỉ liệt kê node này đọc gì.
+- Private (agents/qa-analyst/knowledge/): `delivery-rules.md` (quy tắc bàn giao riêng của node này — trước đây bị đặt tên sai là `fact-framework.md` dù nội dung không phải khung FACT), `requirement-analysis-conventions.md` (7-phần summary template, 8-viewpoint library — đúc từ Module 2; framework 6W nay tham chiếu từ `memory/semantic/06W.md`, không còn là private của node này)
+- Shared (memory/semantic/): `fact-framework.md` (khung FACT dùng chung với Leader — Analyst tự chấm trước khi nộp để giảm vòng FIX), `06W.md` (framework tìm missing rule — promote từ private lên shared vì qa-test-designer và các node sau cũng cần đọc), `testing-conventions.md` (quy ước kiểm thử: định dạng TC_ID, thang Priority test case)
+- Tham chiếu (tầng 2, `memory/project/knowledge.db`): thuật ngữ / thành phần / field + ràng buộc / cấu hình dự án — **KHÔNG nạp cả vào prompt**, chỉ tra đúng mục liên quan tới việc đang làm qua `contextFor()` của `agents/runtime/knowledge.js`.
 
 ## Input/Output contract
 - Input received from (who calls, what format): QA Leader gọi qua function call `run({ taskFile })`, trong đó `taskFile` luôn là `memory/working/task-assignment.md`. Analyst tự `read_file` để lấy nội dung, không nhận task qua tham số trực tiếp.

@@ -19,7 +19,7 @@ Tạo lệnh phân công công việc phân tích tài liệu cho `{{qa_analyst_
    - Phạm vi phân tích: `{{task_scope}}`
 
 2. **Danh sách tài liệu bàn giao**:
-   - Liệt kê các đường dẫn tài liệu theo từng thư mục đã chuẩn hóa (`01_Business`, `02_BA`, `03_DEV`, `04_Dessign`).
+   - Liệt kê các đường dẫn tài liệu theo từng thư mục đã chuẩn hóa (`01_Business`, `02_BA`, `03_DEV`, `04_Design`).
 
 3. **Yêu cầu đầu ra (Deliverables)**:
    - Danh sách các sản phẩm QA Analyst cần tạo (Ví dụ: Mindmap yêu cầu, Matrix bao phủ, Danh sách Test Scenario, Test Case draft).
@@ -34,7 +34,7 @@ Scope: Phân tích module Thanh toán (Payment Gateway)
 Tài liệu:
 - 02_BA/SRS_Payment.md
 - 03_DEV/API_Payment.md
-- 04_Dessign/UI_Payment.md
+- 04_Design/UI_Payment.md
 ```
 
 ## Sample Output
@@ -48,7 +48,7 @@ Tài liệu:
 #### 1. Tài liệu bàn giao:
 - `02_BA/SRS_Payment.md`
 - `03_DEV/API_Payment.md`
-- `04_Dessign/UI_Payment.md`
+- `04_Design/UI_Payment.md`
 
 #### 2. Nhiệm vụ cần thực hiện:
 - [ ] Phân tích các luồng nghiệp vụ thanh toán (thành công, thất bại, timeout).

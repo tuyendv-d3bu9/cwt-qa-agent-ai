@@ -108,12 +108,17 @@ qa-agent-ai/
 │   │       └── requirement-analysis-conventions.md
 │   │
 │   ├── runtime/                         # Core runtime dùng chung
-│   │   ├── llm.js                       # Gọi Gemini API + cache
-│   │   ├── tools.js                     # Tool dispatcher (read/write file, list files)
+│   │   ├── llm.js                       # Gọi LLM API + cache
+│   │   ├── tools.js                     # Registry file op DUY NHẤT — mọi path động phải đi qua đây (safe())
+│   │   ├── db.js                        # Module DUY NHẤT được mở SQLite (knowledge.db + runs.db)
+│   │   ├── knowledge.js                 # Interface TẦNG 2 — contextFor() tra cứu deterministic, getConfig() bỏ hardcode
+│   │   ├── md-sections.js               # Thay đúng 1 mục `###` trong file tầng 3 (giữ nguyên sửa tay của người)
+│   │   ├── handover.js                  # Enforce hợp đồng bàn giao — requireInputs()/verifyProduced()
 │   │   ├── loop.js                      # runRoundLoop (PASS/FIX/ASK) + runStepLoop (step-decision), dùng chung
-│   │   ├── memory.js                    # Working memory
+│   │   ├── memory.js                    # Checkpoint/session state
 │   │   ├── cache.js                     # Cache layer (tránh gọi API trùng)
-│   │   └── mcp-client.js               # MCP client
+│   │   ├── mcp-client.js                # MCP client (CÓ CHỦ Ý không nằm trong registry của tools.js)
+│   │   └── jira-client.js               # Jira REST client (cũng có chủ ý không nằm trong registry)
 │   │
 │   ├── approve.js                       # Script xác nhận thủ công
 │   ├── list-models.js                   # Liệt kê model khả dụng
@@ -132,22 +137,27 @@ qa-agent-ai/
 │   └── 06_Communication/
 │
 ├── memory/                              # Bộ nhớ 3 tầng dùng chung giữa các agent
-│   ├── working/                         # Tầng episodic — trạng thái 1 lần chạy, tự sinh, có thể xóa (gitignored)
-│   │   ├── workflow.json
-│   │   ├── task-assignment.md
-│   │   ├── deliverable-analyst.md
-│   │   ├── gap-report.md
-│   │   ├── progress-report.md
-│   │   └── cache/
-│   ├── semantic/                        # Tầng phương pháp luận — framework dùng chung, KHÔNG đổi theo dự án (commit)
+│   ├── README.md                        # ĐỊNH NGHĨA CHUẨN của lớp memory: 5 tầng + hợp đồng handover.
+│   │                                    # Mọi role.md trỏ về đây, không tự định nghĩa lại.
+│   ├── semantic/                        # TẦNG 1 — phương pháp luận, đúng với MỌI dự án (commit)
 │   │   ├── 06W.md
-│   │   └── fact-framework.md
-│   └── project/                         # Tầng tri thức dự án — chưng cất từ project-docs/ bởi qa-leader, dùng chung (commit)
-│       ├── domain-facts.md              # Ghi/cập nhật tự động khi project-docs/ đổi (qa-leader skill 02b)
-│       ├── known-issues.md              # nt
-│       ├── decisions-log.md             # nt
-│       ├── glossary.md                  # KHÔNG tự động chưng cất — quy ước test case do qa-test-designer tự khởi tạo
-│       └── manifest.json                # {projectDocsHash, distilledAt} — biết khi nào cần chưng cất lại
+│   │   ├── fact-framework.md            # Định nghĩa GỐC của khung FACT (node nào cũng nạp bản này)
+│   │   └── testing-conventions.md       # Định dạng TC_ID `TC-<F>-<nnn>`, thang Priority test case, 8 trường chuẩn
+│   ├── project/                         # TẦNG 2 + 3 — tri thức của dự án hiện tại
+│   │   ├── knowledge.db                 # TẦNG 2: thuật ngữ/thành phần/field/config — TRUY VẤN, không nạp cả.
+│   │   │                                # Tái tạo được từ tài liệu dự án nên KHÔNG commit (.gitignore: *.db)
+│   │   ├── domain-facts.md              # TẦNG 3: đổi thường xuyên, BẠN SỬA TAY ĐƯỢC. Agent chỉ thay đúng
+│   │   ├── known-issues.md              #         mục `###` phái sinh từ tài liệu vừa đổi, không ghi đè cả file
+│   │   ├── decisions-log.md             #         (git giữ lịch sử — không tự dựng versioning riêng)
+│   │   └── manifest.json                # {files: {path: hash}} — hash TỪNG FILE, để biết file nào đã đổi
+│   └── working/                         # TẦNG 4 + 5 — dữ liệu 1 lần chạy, tự sinh, xóa được (gitignored)
+│       ├── runs.db                      # TẦNG 5: phiên chạy + cửa duyệt người + lịch sử run
+│       ├── workflow.json
+│       ├── task-assignment.md
+│       ├── deliverable-analyst.md
+│       ├── gap-report.md
+│       ├── progress-report.md
+│       └── cache/
 │
 ├── .env                                 # API key (không commit)
 ├── .env.example
@@ -158,7 +168,9 @@ qa-agent-ai/
 
 ## Cài đặt
 
-**Yêu cầu:** Node.js >= 18 (ES Modules)
+**Yêu cầu:** Node.js **>= 22.5** (ES Modules + `node:sqlite` built-in)
+
+> Bản `node:sqlite` dùng cho tầng 2/5 của lớp memory là built-in từ Node 22.5, nên repo **không cần thêm dependency nào** và không cần build native module. Khi chạy sẽ thấy dòng `ExperimentalWarning: SQLite is an experimental feature` — **bình thường**, không tắt có chủ ý: tắt đi là che mất cảnh báo API có thể đổi ở bản Node sau.
 
 ```bash
 # 1. Clone repo
