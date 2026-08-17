@@ -14,18 +14,49 @@ export function countMissingRules(missingRulesMarkdown) {
     return rows.length;
 }
 
-/** Count viewpoints and test idea per viewpoint from skill 03 output */
+/** Count viewpoints and test idea per viewpoint from skill 03 output.
+ *  Handles two formats the LLM produces:
+ *    A) Heading-per-viewpoint:  `### Viewpoint 1: Label` (or `### Viewpoint: Label`)
+ *       with numbered list items (`1. …`) underneath.
+ *    B) Markdown table with one row per viewpoint and semicolon-separated ideas in a cell.
+ *  Tries A first; falls back to B when A finds nothing.
+ */
 export function countTestIdeas(viewpointsMarkdown) {
-    const blocks = viewpointsMarkdown.split(/###\s*Viewpoint:/i).slice(1);
-    const perViewpoint = blocks.map(block => {
-        const ideas = block.match(/^\s*\d+\.\s/gm) || [];
-        return ideas.length;
-    });
-    return {
-        viewpointCount: perViewpoint.length,
-        totalIdeas: perViewpoint.reduce((a, b) => a + b, 0),
-        perViewpoint,
-    };
+    // ── Format A: heading blocks ──────────────────────────────────────
+    const blocks = viewpointsMarkdown.split(/###\s*Viewpoint\s*\d*\s*:/i).slice(1);
+    if (blocks.length > 0) {
+        const perViewpoint = blocks.map(block => {
+            const ideas = block.match(/^\s*\d+\.\s/gm) || [];
+            return ideas.length;
+        });
+        return {
+            viewpointCount: perViewpoint.length,
+            totalIdeas: perViewpoint.reduce((a, b) => a + b, 0),
+            perViewpoint,
+        };
+    }
+
+    // ── Format B: markdown table ──────────────────────────────────────
+    // Each data row = 1 viewpoint; ideas are semicolon-separated inside a cell.
+    const tableRows = viewpointsMarkdown
+        .split("\n")
+        .filter(l => l.trim().startsWith("|") && !l.includes("---") && !/tên viewpoint|viewpoint/i.test(l.split("|")[1] ?? ""));
+    if (tableRows.length > 0) {
+        const perViewpoint = tableRows.map(row => {
+            // The last cell usually holds the ideas ("1. …; 2. …; 3. …")
+            const cells = row.split("|").filter(c => c.trim());
+            const ideasCell = cells[cells.length - 1] ?? "";
+            const ideas = ideasCell.match(/\d+\.\s/g) || [];
+            return ideas.length;
+        });
+        return {
+            viewpointCount: perViewpoint.length,
+            totalIdeas: perViewpoint.reduce((a, b) => a + b, 0),
+            perViewpoint,
+        };
+    }
+
+    return { viewpointCount: 0, totalIdeas: 0, perViewpoint: [] };
 }
 
 /**
