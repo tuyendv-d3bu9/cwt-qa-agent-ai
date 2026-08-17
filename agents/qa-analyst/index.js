@@ -41,10 +41,14 @@ async function readAllDocs() {
     return contents;
 }
 
-function assembleDeliverable({ summary, missingRules, viewpoints, check }) {
-    const checkSection = check.ok
+function formatCheckSection(check) {
+    return check.ok
         ? `Đạt đủ ngưỡng tối thiểu (missing rules: ${check.missingRuleCount}, viewpoint: ${check.viewpointCount}, test idea: ${check.totalIdeas}).`
         : `**CHƯA ĐẠT** — ${check.issues.join(" ")}`;
+}
+
+function assembleDeliverable({ summary, missingRules, viewpoints, check }) {
+    const checkSection = formatCheckSection(check);
     return (
         `# Deliverable — QA Analyst\n\n` +
         `## 1. Requirement Summary\n${summary}\n\n` +
@@ -52,6 +56,15 @@ function assembleDeliverable({ summary, missingRules, viewpoints, check }) {
         `## 3. Viewpoints & Test Ideas\n${viewpoints}\n\n` +
         `## 4. Self Count Check (deterministic, tool count-check.js)\n${checkSection}\n`
     );
+}
+
+function updateCountCheck(content) {
+    const clean = content.replace(/##\s*4\.\s*Self Count Check[\s\S]*$/i, "").trim();
+    const mr = clean.split(/##\s*2\.\s*Missing/i)[1]?.split(/##\s*3\.\s*Viewpoint/i)[0] ?? clean;
+    const vp = clean.split(/##\s*3\.\s*Viewpoint/i)[1] ?? clean;
+
+    const check = verifyDeliverable({ missingRulesMarkdown: mr, viewpointsMarkdown: vp });
+    return clean + `\n\n## 4. Self Count Check (deterministic, tool count-check.js)\n${formatCheckSection(check)}\n`;
 }
 
 // First run (no FIX feedback) — run sequentially skill 01 -> 02 -> 03
@@ -73,10 +86,11 @@ async function runFullAnalysis(task) {
 
 // REVISION LOOP — only fix the points Leader points out, do not run from the beginning
 async function runRevision(task) {
-    const skill4 = await loadSkill("04_revise_on_feedback.md"); // tên file này đúng
+    const skill4 = await loadSkill("04_revise_on_feedback.md");
     const prev = await runTool("read_file", { path: "memory/working/deliverable-analyst.md" });
-    const feedback = task.split("## Feedback vong").pop();
-    return askLLM(skill4, `feedback=${feedback}\nprevious_deliverable=${prev.content}`);
+    const feedback = task.split(/(?=##\s*Feedback\s*(?:round|vòng|vong))/i).pop();
+    const rawRevised = await askLLM(skill4, `feedback=${feedback}\nprevious_deliverable=${prev.content}`);
+    return updateCountCheck(rawRevised);
 }
 
 // Handover contract (memory/README.md rule 3). The workflow checks `requires`
@@ -90,7 +104,7 @@ export const CONTRACT = {
 
 export async function run({ taskFile }) {
     const task = await runTool("read_file", { path: taskFile });
-    const isRevision = task.content.includes("## Feedback vong");
+    const isRevision = /(?:##\s*Feedback\s*(?:round|vòng|vong))/i.test(task.content);
 
     const deliverable = isRevision
         ? await runRevision(task.content)
