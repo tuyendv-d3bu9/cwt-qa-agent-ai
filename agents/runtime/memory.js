@@ -21,6 +21,8 @@ import { existsSync, readFileSync, renameSync } from "node:fs";
 import path from "node:path";
 import { db, RUNS_DB } from "./db.js";
 
+// Historical location, kept only so importLegacyJson() can still find and adopt a state
+// file written before the DB backend existed. Nothing writes here any more.
 const LEGACY_STATE_FILE = path.resolve(process.cwd(), "memory/working/workflow.json");
 
 /** Fields a step actually has. Anything else is a typo, and the old JSON backend

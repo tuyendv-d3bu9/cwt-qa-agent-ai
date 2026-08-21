@@ -16,24 +16,25 @@ import { runTool } from "../../runtime/tools.js";
 import { upsertSection, emptyKnowledgeFile, getSection } from "../../runtime/md-sections.js";
 import { upsertArtifact, linkArtifacts, markArtifactsStale, downstreamOf, artifactId } from "../../runtime/db.js";
 import { getConfig } from "../../runtime/knowledge.js";
+import * as P from "../../runtime/paths.js";
 
 // Generic across projects: every project has domain facts, known issues and decisions.
 // Titles get the project name appended only when tier-2 config supplies one.
 const KINDS = {
     domain: {
-        path: "memory/project/domain-facts.md",
+        path: P.DOMAIN_FACTS,
         baseTitle: "Domain Facts",
         type: "Fact / Business Context (chưng cất từ tài liệu dự án)",
         consumedBy: "Các node thiết kế test và tự động hoá (đọc trực tiếp — xem role.md từng node).",
     },
     issue: {
-        path: "memory/project/known-issues.md",
+        path: P.KNOWN_ISSUES,
         baseTitle: "Known Issues",
         type: "Fact / Registry (chưng cất từ tài liệu QA của dự án)",
         consumedBy: "Node thiết kế test (đánh dấu regression), tự động hoá (nhận biết bug đã biết), báo cáo (grounding Severity).",
     },
     decision: {
-        path: "memory/project/decisions-log.md",
+        path: P.DECISIONS_LOG,
         baseTitle: "Decisions Log",
         type: "Fact / Change History (chưng cất từ tài liệu giao tiếp của dự án)",
         consumedBy: "Tham chiếu cho người + node phân tích/điều phối khi cần tra quyết định đã chốt.",

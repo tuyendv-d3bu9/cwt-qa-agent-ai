@@ -7,7 +7,7 @@ Convention / Architecture
 
 Khi verdict tổng thể là **ASK**, Verifier ghi checkpoint bằng cách gọi `markStep("qa-verifier", { status, output })` từ `agents/runtime/memory.js` — đây là cơ chế checkpoint DUY NHẤT dùng chung cho toàn bộ pipeline (không tự viết file JSON riêng như trước).
 
-`memory.js` lưu trạng thái vào **`memory/working/runs.db`** (tầng 5, xem `memory/README.md`), 3 bảng:
+`memory.js` lưu trạng thái vào **`.qa-run/runs.db`** (tầng 5, xem `memory/README.md`), 3 bảng:
 
 | Bảng | Giữ gì |
 |---|---|
@@ -24,8 +24,8 @@ Khi verdict tổng thể là **ASK**, Verifier ghi checkpoint bằng cách gọi
   "created_at": "...",
   "status": "active",
   "steps": [
-    { "agent": "qa-analyst", "status": "done", "output": "memory/working/deliverable-analyst.md", "human_approved": true, "approved_by": "...", "updated_at": "..." },
-    { "agent": "qa-verifier", "status": "waiting_ask", "output": "memory/working/deliverable-verifier.md", "human_approved": false, "updated_at": "..." }
+    { "agent": "qa-analyst", "status": "done", "output": ".qa-run/deliverables/deliverable-analyst.md", "human_approved": true, "approved_by": "...", "updated_at": "..." },
+    { "agent": "qa-verifier", "status": "waiting_ask", "output": ".qa-run/deliverables/deliverable-verifier.md", "human_approved": false, "updated_at": "..." }
   ]
 }
 ```
@@ -41,7 +41,7 @@ Khi verdict tổng thể là **ASK**, Verifier ghi checkpoint bằng cách gọi
 - Không tự tạo `workflow/flow-*.js` mới nếu chưa được yêu cầu.
 
 ## Source
-`agents/runtime/memory.js` (state shape gốc, dùng chung toàn pipeline — hợp nhất 2026-08-17, trước đó Verifier từng mô phỏng theo shape hẹp riêng của `flow-2-leader-analyst.js`, nay đã bỏ; backend đổi từ `memory/working/workflow.json` sang `memory/working/runs.db` cùng ngày, mục K), thiết kế QA Verifier.
+`agents/runtime/memory.js` (state shape gốc, dùng chung toàn pipeline — hợp nhất 2026-08-17, trước đó Verifier từng mô phỏng theo shape hẹp riêng của `flow-2-leader-analyst.js`, nay đã bỏ; backend đổi từ file JSON `workflow.json` sang SQLite `.qa-run/runs.db` cùng ngày, mục K + P5), thiết kế QA Verifier.
 
 ## Node referenced
 qa-verifier

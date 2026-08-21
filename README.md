@@ -62,13 +62,13 @@
                                     │  4 Skills (01→04)  │
                                     └────────────────────┘
                                            │
-                                  memory/working/deliverable-analyst.md
+                                  .qa-run/deliverables/deliverable-analyst.md
 ```
 
 **Luồng giao tiếp giữa agents:**
-- Leader → Analyst: qua file `memory/working/task-assignment.md`
-- Analyst → Leader: qua file `memory/working/deliverable-analyst.md`
-- Leader → Human: qua file `memory/working/gap-report.md` (khi cần xác nhận)
+- Leader → Analyst: qua file `.qa-run/deliverables/task-assignment.md`
+- Analyst → Leader: qua file `.qa-run/deliverables/deliverable-analyst.md`
+- Leader → Human: qua file `.qa-run/deliverables/gap-report.md` (khi cần xác nhận)
 
 ---
 
@@ -236,12 +236,12 @@ Nếu Leader phát hiện thông tin thiếu/mâu thuẫn, nó sẽ dừng và t
 ```json
 {
   "status": "waiting_input",
-  "data": { "formPath": "memory/working/gap-report.md" }
+  "data": { "formPath": ".qa-run/deliverables/gap-report.md" }
 }
 ```
 
 **Hành động:**
-1. Mở file `memory/working/gap-report.md`
+1. Mở file `.qa-run/deliverables/gap-report.md`
 2. Điền câu trả lời ngay bên dưới mỗi câu hỏi
 3. Lưu file
 4. Chạy lại **đúng lệnh trên** — runner tự phát hiện và tiếp tục
@@ -250,10 +250,10 @@ Nếu Leader phát hiện thông tin thiếu/mâu thuẫn, nó sẽ dừng và t
 
 ```bash
 # Kết quả phân tích của Analyst
-cat memory/working/deliverable-analyst.md
+cat .qa-run/deliverables/deliverable-analyst.md
 
 # Tiến độ workflow
-cat memory/working/progress-report.md
+cat .qa-run/deliverables/progress-report.md
 ```
 
 ---
@@ -365,14 +365,14 @@ Agent phân tích tài liệu, nhận task qua `task-assignment.md`. Có 4 skill
 | Layer | Vị trí | Có thể xóa? |
 |---|---|---|
 | Working memory | RAM, `contents` array | Tự mất khi run kết thúc |
-| Phiên chạy + cửa duyệt | `memory/working/runs.db` | Xóa để restart toàn bộ workflow (mất luôn lịch sử các run trước) |
-| Task assignment | `memory/working/task-assignment.md` | Xóa để giao task mới |
-| Deliverable | `memory/working/deliverable-analyst.md` | Output của Analyst — xóa để chạy lại |
-| Gap report | `memory/working/gap-report.md` | Xóa để bỏ qua form cũ, bắt đầu gap check mới |
-| Progress | `memory/working/progress-report.md` | Xóa tự do |
-| Cache API | `memory/working/cache/` | Xóa tự do — chỉ tốn quota khi không có cache |
+| Phiên chạy + cửa duyệt | `.qa-run/runs.db` | Xóa để restart toàn bộ workflow (mất luôn lịch sử các run trước) |
+| Task assignment | `.qa-run/deliverables/task-assignment.md` | Xóa để giao task mới |
+| Deliverable | `.qa-run/deliverables/deliverable-analyst.md` | Output của Analyst — xóa để chạy lại |
+| Gap report | `.qa-run/deliverables/gap-report.md` | Xóa để bỏ qua form cũ, bắt đầu gap check mới |
+| Progress | `.qa-run/deliverables/progress-report.md` | Xóa tự do |
+| Cache API | `.qa-run/cache/` | Xóa tự do — chỉ tốn quota khi không có cache |
 
-> **Tip:** Xóa `memory/working/` để reset hoàn toàn. Xóa chỉ `memory/working/cache/` để bắt buộc gọi API thật.
+> **Tip:** Xóa `memory/working/` để reset hoàn toàn. Xóa chỉ `.qa-run/cache/` để bắt buộc gọi API thật.
 
 ---
 
@@ -389,13 +389,13 @@ node agents/testing.js
 node workflow/flow-2-leader-analyst.js "Tên task của bạn"
 
 # Xem kết quả phân tích
-cat memory/working/deliverable-analyst.md
+cat .qa-run/deliverables/deliverable-analyst.md
 
 # Xem tiến độ
-cat memory/working/progress-report.md
+cat .qa-run/deliverables/progress-report.md
 
 # Xem gap report (nếu có)
-cat memory/working/gap-report.md
+cat .qa-run/deliverables/gap-report.md
 ```
 
 ---
@@ -434,7 +434,7 @@ cp .env.example .env
 **Workflow bị stuck ở `waiting_input`**
 ```bash
 # Kiểm tra file gap report
-cat memory/working/gap-report.md
+cat .qa-run/deliverables/gap-report.md
 
 # Điền câu trả lời vào file, sau đó chạy lại
 node workflow/flow-2-leader-analyst.js "Task name"
@@ -448,7 +448,7 @@ node workflow/flow-2-leader-analyst.js "Task name"
 
 **Cache cũ cho kết quả sai**
 ```bash
-rm -rf memory/working/cache/
+rm -rf .qa-run/cache/
 # Chạy lại — sẽ gọi API thật
 ```
 

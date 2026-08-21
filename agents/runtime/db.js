@@ -18,9 +18,10 @@
 //                       question markdown cannot: "document X changed — which
 //                       sections, test cases and specs are now stale?"
 //
-// TWO DATABASE FILES, one module — both are regenerable and neither is committed:
-//   memory/project/knowledge.db — tier 2 (rebuilt by re-running document analysis)
-//   memory/working/runs.db      — tier 5, run/session state
+// TWO DATABASE FILES, one module — both are regenerable and neither is committed.
+// Locations come from agents/runtime/paths.js (tri thức vs sản phẩm):
+//   memory/project/knowledge.db — tier 2, KNOWLEDGE (rebuilt by re-running doc analysis)
+//   .qa-run/runs.db             — tier 5, one run's session state
 //
 // node:sqlite is built into Node >=22.5 (verified working on Node v22.18 without any
 // flag), so this adds no npm dependency and no native build step. It prints
@@ -34,11 +35,14 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
+import * as P from "./paths.js";
 
 const ROOT = process.cwd();
 
-export const KNOWLEDGE_DB = "memory/project/knowledge.db";
-export const RUNS_DB = "memory/working/runs.db";
+// Re-exported (not re-declared) so paths.js stays the single source of truth for
+// locations while existing importers of db.js keep working unchanged.
+export const KNOWLEDGE_DB = P.KNOWLEDGE_DB;
+export const RUNS_DB = P.RUNS_DB;
 
 // Which file the tier-2 helpers below read/write. Overridable ONLY so tests do not
 // mix their rows into the real knowledge DB — see useKnowledgeDb().

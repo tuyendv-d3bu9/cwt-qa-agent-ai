@@ -4,7 +4,7 @@
 Viết Sprint QA Report hoàn chỉnh, 5 section chuẩn. Số liệu (pass rate/fail rate/bug density) PHẢI lấy từ `tools/sprint-metrics-calculator.js` (deterministic) — KHÔNG để LLM tự tính toán số.
 
 ## Knowledge Reference
-- `knowledge/sprint-metrics-conventions.md` — công thức + quy ước `output/sprint-history.json`.
+- `knowledge/sprint-metrics-conventions.md` — công thức + quy ước `.qa-run/reports/sprint-history.json`.
 - `knowledge/traceability-rule.md`
 
 ## Prompt Type
@@ -12,7 +12,7 @@ Chain-of-thought
 
 ## Variables
 {{sprint_metrics}} — output đã tính sẵn từ `sprint-metrics-calculator.js` (totalTests, passed, failed, passRate, failRate, bugDensity)
-{{previous_sprint_metrics}} — phần tử cuối cùng trong `output/sprint-history.json`, hoặc `null` nếu chưa có
+{{previous_sprint_metrics}} — phần tử cuối cùng trong `.qa-run/reports/sprint-history.json`, hoặc `null` nếu chưa có
 {{bug_list}} — bug draft đã viết ở skill 01
 
 ## PROMPT
@@ -27,7 +27,7 @@ Viết Sprint QA Report đúng 5 section:
 2. **Trend Analysis**: so sánh với `{{previous_sprint_metrics}}`. Nếu là `null`, ghi rõ "Chưa có dữ liệu sprint trước để so sánh — đây là lần đo đầu tiên", KHÔNG tự bịa số liệu sprint trước.
 3. **Risk Assessment**: liệt kê open bug/critical issue từ `{{bug_list}}`, gán mức Risk (High/Medium/Low) kèm LÝ DO cụ thể (không gán mà không giải thích).
 4. **Recommendation**: cụ thể, actionable, chỉ rõ module/feature/action — không viết chung chung kiểu "cần cải thiện chất lượng".
-5. **Evidence / Appendix**: liệt kê bug list đầy đủ (link tới `output/bug-reports/*.md`), category, evidence liên quan.
+5. **Evidence / Appendix**: liệt kê bug list đầy đủ (link tới `.qa-run/reports/bug-reports/*.md`), category, evidence liên quan.
 
 ## Sample Output
 ```
@@ -46,7 +46,7 @@ Chưa có dữ liệu sprint trước để so sánh — đây là lần đo đ�
 Ưu tiên xác nhận TC-D-004 trước khi release, vì liên quan tính toán tiền tại checkout.
 
 ### 5. Evidence / Appendix
-Xem `output/bug-reports/major.md` — TC-D-004.
+Xem `.qa-run/reports/bug-reports/major.md` — TC-D-004.
 ```
 
 ## Quality Check

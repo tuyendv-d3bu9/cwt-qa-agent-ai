@@ -6,7 +6,7 @@ Convention
 ## Content
 
 ### Đặt tên file spec
-`tests/<TC_ID>.spec.ts` — ví dụ `tests/TC-D-001.spec.ts`. Giữ nguyên TC_ID từ `deliverable-test-designer.md` trong cả tên file và tên `test(...)` bên trong, để truy nguồn được 2 chiều (spec ↔ test case).
+`.qa-run/tests/<TC_ID>.spec.ts` — ví dụ `.qa-run/tests/TC-D-001.spec.ts`. Giữ nguyên TC_ID từ `deliverable-test-designer.md` trong cả tên file và tên `test(...)` bên trong, để truy nguồn được 2 chiều (spec ↔ test case).
 
 ### Đặt tên screenshot (evidence khi fail)
 `evidence/fail_<TC_ID>.png` — chỉ chụp khi test fail, dùng để debug. KHÔNG dùng làm căn cứ pass/fail (xem `oracle-problem.md`).

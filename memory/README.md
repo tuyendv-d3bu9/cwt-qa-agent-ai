@@ -24,7 +24,7 @@ Hệ quả quan trọng: **thứ ít đổi + tra cứu theo nhu cầu thì vào
 **2. Reference** | `memory/project/knowledge.db` | Tri thức tham chiếu **ổn định** của dự án: thuật ngữ, thành phần, field + ràng buộc, cấu hình | Ít đổi | **Truy vấn** — chỉ lấy phần liên quan | `qa-leader` (sau khi phân tích) |
 **3. Working knowledge** | `memory/project/*.md` | Tri thức dự án theo mục đích, **đổi thường xuyên**: domain facts, known issues, decisions | Thường xuyên | Nạp cả vào prompt | `qa-leader` ghi + **người sửa tay** |
 **4. Run data** | `memory/working/*` | Dữ liệu của **1 lần chạy**: deliverable từng node, gap report, oracle, kết quả test, evidence | Mỗi lần chạy | Đọc/ghi file trực tiếp | Agent |
-**5. Session state** | `memory/working/runs.db` | Trạng thái phiên, cửa duyệt người, lịch sử run | Mỗi bước | Qua `agents/runtime/memory.js` | Workflow |
+**5. Session state** | `.qa-run/runs.db` | Trạng thái phiên, cửa duyệt người, lịch sử run | Mỗi bước | Qua `agents/runtime/memory.js` | Workflow |
 
 Tầng 4 và 5 là dữ liệu tạm, không đi theo git. Tầng 1 và 3 đi theo git. Tầng 2 tái tạo được từ tầng nguồn (`project-docs/`).
 

@@ -1,7 +1,7 @@
 # Skill: Log & Evidence Narrative Writer
 
 ## Purpose
-Tổng hợp kết quả chạy test thành 1 narrative ngắn (≤300 từ). TÁI DÙNG dữ liệu đã parse sẵn trong `memory/working/deliverable-verifier.md` (do `qa-verifier` tạo ra) — KHÔNG tự parse lại `test-results.json` thô, tránh trùng logic với `agents/qa-verifier/tools/parse-test-results.js`.
+Tổng hợp kết quả chạy test thành 1 narrative ngắn (≤300 từ). TÁI DÙNG dữ liệu đã parse sẵn trong `.qa-run/deliverables/deliverable-verifier.md` (do `qa-verifier` tạo ra) — KHÔNG tự parse lại `test-results.json` thô, tránh trùng logic với `agents/qa-verifier/tools/parse-test-results.js`.
 
 ## Knowledge Reference
 - `knowledge/traceability-rule.md`
@@ -10,7 +10,7 @@ Tổng hợp kết quả chạy test thành 1 narrative ngắn (≤300 từ). T�
 Chain-of-thought
 
 ## Variables
-{{verifier_deliverable}} — toàn bộ `memory/working/deliverable-verifier.md` (đã có bảng TC_ID/status/nhãn)
+{{verifier_deliverable}} — toàn bộ `.qa-run/deliverables/deliverable-verifier.md` (đã có bảng TC_ID/status/nhãn)
 
 ## PROMPT
 Bạn là Log Summarizer Agent. Dựa trên kết quả đã phân loại sẵn:

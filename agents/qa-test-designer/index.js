@@ -9,6 +9,7 @@ import { contextFor } from "../runtime/knowledge.js";
 import { registerArtifact } from "../qa-leader/tools/impact-analysis.js";
 import { artifactId } from "../runtime/db.js";
 import { verifyDeliverable } from "./tools/coverage-check.js";
+import * as P from "../runtime/paths.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
 const FACT = await readFile(new URL("../../memory/semantic/fact-framework.md", import.meta.url), "utf8");
@@ -52,8 +53,8 @@ function assembleDeliverable({ testCases, check }) {
 // Tier-3 files this node consumes — used to record provenance of the test cases it
 // produces. Kept next to the readFile calls above so the two cannot drift apart.
 const KNOWLEDGE_FILES_READ = [
-    "memory/project/domain-facts.md",
-    "memory/project/known-issues.md",
+    P.DOMAIN_FACTS,
+    P.KNOWN_ISSUES,
 ];
 
 /** TC_ID of every row in the generated 8-field table. Deterministic, no LLM. */
@@ -69,8 +70,8 @@ function extractTestCaseIds(testCaseMarkdown) {
 // Handover contract — see memory/README.md rule 3.
 export const CONTRACT = {
     agent: "qa-test-designer",
-    requires: ["memory/working/task-assignment.md", "memory/working/deliverable-analyst.md"],
-    produces: ["memory/working/deliverable-test-designer.md"],
+    requires: [P.TASK_ASSIGNMENT, P.DELIVERABLE_ANALYST],
+    produces: [P.DELIVERABLE_TEST_DESIGNER],
 };
 
 export async function run({ taskFile, deliverableFile }) {
@@ -89,7 +90,7 @@ export async function run({ taskFile, deliverableFile }) {
     const check = verifyDeliverable({ deliverableAnalystMarkdown: analystDeliverable.content, testCaseMarkdown: testCases });
     const deliverable = assembleDeliverable({ testCases, check });
 
-    await runTool("write_file", { path: "memory/working/deliverable-test-designer.md", content: deliverable });
+    await runTool("write_file", { path: P.DELIVERABLE_TEST_DESIGNER, content: deliverable });
 
     // Register each test case in the traceability graph, derived from the tier-3
     // knowledge files this node actually read. Without this, impact analysis stops at
@@ -101,5 +102,5 @@ export async function run({ taskFile, deliverableFile }) {
         registerArtifact({ kind: "testcase", ref: tcId, derivedFrom: knowledgeSources });
     }
 
-    return { status: "success", data: { deliverableFile: "memory/working/deliverable-test-designer.md" }, error: null };
+    return { status: "success", data: { deliverableFile: P.DELIVERABLE_TEST_DESIGNER }, error: null };
 }

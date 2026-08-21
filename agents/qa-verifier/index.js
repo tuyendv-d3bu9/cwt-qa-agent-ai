@@ -15,6 +15,7 @@ import { callLLM, callVisionLLM } from "../runtime/llm.js";
 import { markStep } from "../runtime/memory.js";
 import { parseTestResults, groupByTcId } from "./tools/parse-test-results.js";
 import { combine, deriveVerdict, selectForVision, LABELS } from "./tools/verdict-combiner.js";
+import * as P from "../runtime/paths.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
 const FACT = await readFile(new URL("../../memory/semantic/fact-framework.md", import.meta.url), "utf8");
@@ -26,7 +27,7 @@ const RISK_TAXONOMY = await readFile(new URL("../qa-leader/knowledge/task-manage
 const ORACLE_BOUNDARY = await readFile(new URL("../qa-automation/knowledge/oracle-problem.md", import.meta.url), "utf8");
 const SKILLS_DIR = new URL("./skills/", import.meta.url);
 
-const DELIVERABLE_FILE = "memory/working/deliverable-verifier.md";
+const DELIVERABLE_FILE = P.DELIVERABLE_VERIFIER;
 
 async function loadSkill(fileName) {
     return readFile(new URL(fileName, SKILLS_DIR), "utf8");
@@ -65,7 +66,7 @@ const findPriority = (md, tcId) => findCell(md, tcId, 6);
  * never to agreement. A missing screenshot must not look like confirmation.
  */
 async function analyseScreenshot({ tcId, expectedResult, uiConventions, skill }) {
-    const imagePath = `evidence/${tcId}-after.jpg`;
+    const imagePath = P.screenshotAfter(tcId);
     const exists = await runTool("file_exists", { path: imagePath });
     if (!exists.exists) return { visual: null, note: `không có ${imagePath}` };
 
@@ -119,9 +120,9 @@ function assembleDeliverable({ verdict, analysed, visionSkipped, notes, narrativ
 export const CONTRACT = {
     agent: "qa-verifier",
     requires: [
-        "memory/working/test-results.json",
-        "memory/working/ui-conventions.md",
-        "memory/working/deliverable-test-designer.md",
+        P.TEST_RESULTS,
+        P.UI_CONVENTIONS,
+        P.DELIVERABLE_TEST_DESIGNER,
     ],
     produces: [DELIVERABLE_FILE],
 };

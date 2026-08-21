@@ -3,21 +3,55 @@
 // unreliably (e.g. claiming "all ideas covered" while silently dropping some).
 // This tool counts and cross-checks the ACTUAL output, deterministically.
 
-const TC_ID_PATTERN = /^TC-D-\d{3}$/;
+import { countTestIdeas } from "../../qa-analyst/tools/count-check.js";
+
+// `TC-<F>-<nnn>` per memory/semantic/testing-conventions.md — the feature code is NOT
+// fixed. This was `/^TC-D-\d{3}$/`, which rejected every test case of any project whose
+// feature code is not literally "D" ("TC_ID sai format" on all of them). Same hardcoding
+// that was already removed from qa-reporter's countDesignedTestCases().
+const TC_ID_PATTERN = /^TC-[A-Za-z0-9]+-\d+$/;
 const REQUIRED_FIELDS = 8; // TC_ID | Title | Precondition | Steps | Test Data | Expected Result | Priority | Tags
 
-/** Count test ideas Analyst produced (same parsing logic as qa-analyst's count-check.js) */
+/**
+ * Count the test ideas the Analyst produced.
+ *
+ * Delegates to qa-analyst's countTestIdeas() instead of re-implementing it. The comment
+ * here used to claim "same parsing logic as qa-analyst's count-check.js" while the code
+ * did something narrower: it split on /###\s*Viewpoint:/i, which does not match the
+ * `### Viewpoint 1: Label` heading the analyst actually emits, and had no table fallback
+ * at all. Measured on the real memory/working/deliverable-analyst.md: count-check found
+ * 26 ideas, this function found 0.
+ *
+ * Because it returned 0, the "có idea bị bỏ sót" check below compared against 0 and could
+ * never fire — the coverage gate was dead code. The Test Designer could silently drop
+ * every idea the Analyst raised and still pass its own self-check.
+ *
+ * Cross-node tool import, same established pattern as qa-automation importing
+ * registerArtifact() from qa-leader/tools/impact-analysis.js: the handover rule in
+ * memory/README.md forbids reading another node's private KNOWLEDGE, not sharing code.
+ * Two copies of one parser is exactly how the two answers drifted apart.
+ */
 export function countAnalystIdeas(deliverableAnalystMarkdown) {
-    const blocks = deliverableAnalystMarkdown.split(/###\s*Viewpoint:/i).slice(1);
-    return blocks.reduce((total, block) => total + (block.match(/^\s*\d+\.\s/gm) || []).length, 0);
+    return countTestIdeas(deliverableAnalystMarkdown).totalIdeas;
 }
 
-/** Parse the 8-field test case table rows (exclude header + separator) */
+/** A GFM separator cell: dashes with optional alignment colons — `---`, `:-:`, `-`, `:--`. */
+const isSeparatorCell = (cell) => /^:?-+:?$/.test(cell.trim());
+
+/**
+ * Parse the 8-field test case table rows (exclude header + separator).
+ *
+ * Separator detection is per-cell, not `!line.includes("---")`. GitHub-flavored Markdown
+ * accepts a one-dash separator (`|-|-|-|`), which the old substring test did not recognise
+ * — so the separator was returned as a DATA ROW, and then failed the TC_ID format check
+ * with the delightful message `TC_ID sai format: -`.
+ */
 export function parseTestCaseRows(testCaseMarkdown) {
     return testCaseMarkdown
         .split("\n")
-        .filter(l => l.trim().startsWith("|") && !l.includes("---") && !/^\|\s*TC_ID/i.test(l.trim()))
-        .map(l => l.split("|").map(c => c.trim()).filter((_, i, arr) => i > 0 && i < arr.length - 1));
+        .filter(l => l.trim().startsWith("|") && !/^\|\s*TC_ID/i.test(l.trim()))
+        .map(l => l.split("|").map(c => c.trim()).filter((_, i, arr) => i > 0 && i < arr.length - 1))
+        .filter(cells => cells.length > 0 && !cells.every(isSeparatorCell));
 }
 
 /** Count how many OPEN QUESTION-blocked ideas were explicitly carried over (not silently dropped) */
@@ -53,7 +87,10 @@ export function verifyDeliverable({ deliverableAnalystMarkdown, testCaseMarkdown
 
     const badIds = tcIds.filter(id => !TC_ID_PATTERN.test(id));
     if (badIds.length > 0) {
-        issues.push(`TC_ID sai format (phải là TC-D-<3 số>): ${badIds.join(", ")}.`);
+        // Message describes the ACTUAL pattern. It used to say "phải là TC-D-<3 số>" even
+        // after the check was generalised — a gate whose message lies about what it wants
+        // sends the author chasing the wrong fix.
+        issues.push(`TC_ID sai format (phải là TC-<mã feature>-<số>, ví dụ TC-D-001): ${badIds.join(", ")}.`);
     }
 
     const incompleteRows = rows.filter(r => r.length < REQUIRED_FIELDS || r.some(c => c === ""));

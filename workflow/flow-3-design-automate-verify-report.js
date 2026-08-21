@@ -38,12 +38,13 @@ import { loadState, markStep, requireApproved, currentRun, finishRun } from "../
 import { initDatabases } from "../agents/runtime/db.js";
 import { getConfig } from "../agents/runtime/knowledge.js";
 import { requireInputs, verifyProduced } from "../agents/runtime/handover.js";
+import * as P from "../agents/runtime/paths.js";
 
-const TASK_FILE = "memory/working/task-assignment.md";
-const ANALYST_DELIVERABLE = "memory/working/deliverable-analyst.md";
-const TEST_DESIGNER_DELIVERABLE = "memory/working/deliverable-test-designer.md";
-const TEST_RESULTS_FILE = "memory/working/test-results.json";
-const UI_CONVENTIONS_FILE = "memory/working/ui-conventions.md";
+const TASK_FILE = P.TASK_ASSIGNMENT;
+const ANALYST_DELIVERABLE = P.DELIVERABLE_ANALYST;
+const TEST_DESIGNER_DELIVERABLE = P.DELIVERABLE_TEST_DESIGNER;
+const TEST_RESULTS_FILE = P.TEST_RESULTS;
+const UI_CONVENTIONS_FILE = P.UI_CONVENTIONS;
 
 const args = process.argv.slice(2);
 const confirmMcp = args.includes("--confirm-mcp");

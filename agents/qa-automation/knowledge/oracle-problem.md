@@ -15,7 +15,7 @@ Testing Theory / Convention
 
 ### Ranh giới của ảnh — 3 việc ảnh ĐƯỢC làm, 1 việc KHÔNG
 
-Rule trên vẫn nguyên. Phần dưới chỉ nói rõ ảnh được dùng tới đâu, vì hiện mỗi spec chủ động chụp `evidence/<TC_ID>-before.jpg` và `-after.jpg` (không chỉ chụp khi fail nữa).
+Rule trên vẫn nguyên. Phần dưới chỉ nói rõ ảnh được dùng tới đâu, vì hiện mỗi spec chủ động chụp `.qa-run/evidence/<TC_ID>-before.jpg` và `-after.jpg` (không chỉ chụp khi fail nữa).
 
 | Ảnh ĐƯỢC dùng để | Ai dùng |
 |---|---|
@@ -31,7 +31,7 @@ Nói cách khác: `expect()` trả lời **"đúng hay sai"**; ảnh trả lời
 
 Vì vậy `spec-assertion-check.js` **không cần nới lỏng**: spec có cả ảnh lẫn `expect()` vẫn hợp lệ, chỉ spec **chỉ có ảnh mà 0 assertion** mới bị chặn.
 
-Ngoài ra, `browser_verify_*` của MCP gọi lúc **authoring** (xem `01_exploratory_ui_discovery.md`) cũng không phải verdict — lệch phát hiện ở đó là **phát hiện exploratory**, ghi vào `memory/working/exploratory-findings.md` để người xem, KHÔNG thay cho lần chạy spec thật.
+Ngoài ra, `browser_verify_*` của MCP gọi lúc **authoring** (xem `01_exploratory_ui_discovery.md`) cũng không phải verdict — lệch phát hiện ở đó là **phát hiện exploratory**, ghi vào `.qa-run/deliverables/exploratory-findings.md` để người xem, KHÔNG thay cho lần chạy spec thật.
 
 ## Source
 Thiết kế QA Automation.

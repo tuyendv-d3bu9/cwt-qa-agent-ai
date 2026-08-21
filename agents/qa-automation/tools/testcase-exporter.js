@@ -12,8 +12,9 @@
 // for the generator to turn into assertions, not as something the runtime interprets.
 
 import { runTool } from "../../runtime/tools.js";
+import * as P from "../../runtime/paths.js";
 
-export const DATA_PATH = "tests/data/test-cases.json";
+export const DATA_PATH = P.TEST_CASE_DATA;
 
 const FIELDS = ["TC_ID", "Title", "Precondition", "Steps", "Test Data", "Expected Result", "Priority", "Tags"];
 
@@ -104,7 +105,7 @@ export async function exportTestCases(markdown, path = DATA_PATH) {
     const { cases, malformed } = buildDataset(markdown);
     const res = await runTool("write_json", {
         path,
-        data: { generatedFrom: "memory/working/deliverable-test-designer.md", count: cases.length, cases },
+        data: { generatedFrom: P.DELIVERABLE_TEST_DESIGNER, count: cases.length, cases },
     });
     if (res.error) throw new Error(`Không ghi được ${path}: ${res.error}`);
     return { path, count: cases.length, malformed, cases };

@@ -20,7 +20,7 @@ import { contextFor, getConfig, putConfig } from "../runtime/knowledge.js";
 import { registerArtifact } from "../qa-leader/tools/impact-analysis.js";
 import { artifactId, getArtifact, upsertArtifact } from "../runtime/db.js";
 import { connectPlaywrightMCP } from "../runtime/mcp-client.js";
-import { verifyAllSpecs } from "./tools/spec-assertion-check.js";
+import { verifyAllSpecs, verifySpec, hasEphemeralRefSelector } from "./tools/spec-assertion-check.js";
 import {
     parseSnapshot, snapshotTextFrom, filterByKeywords, keywordsFrom,
     toPromptLines, structureFingerprint, interactiveNodes,
@@ -30,6 +30,7 @@ import {
 } from "./tools/ui-element-registry.js";
 import { planSteps, WHITELIST } from "./tools/step-planner.js";
 import { exportTestCases, buildDataset, DATA_PATH } from "./tools/testcase-exporter.js";
+import * as P from "../runtime/paths.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
 const FACT = await readFile(new URL("../../memory/semantic/fact-framework.md", import.meta.url), "utf8");
@@ -41,10 +42,10 @@ const DOMAIN = await readFile(new URL("../../memory/project/domain-facts.md", im
 const KNOWN_ISSUES = await readFile(new URL("../../memory/project/known-issues.md", import.meta.url), "utf8");
 const SKILLS_DIR = new URL("./skills/", import.meta.url);
 
-const SNAPSHOT_FILE = "memory/working/snapshot-latest.md";
-const FINDINGS_FILE = "memory/working/exploratory-findings.md";
-const UI_CONVENTIONS_FILE = "memory/working/ui-conventions.md";
-const DELIVERABLE_FILE = "memory/working/deliverable-automation.md";
+const SNAPSHOT_FILE = P.SNAPSHOT_LATEST;
+const FINDINGS_FILE = P.EXPLORATORY_FINDINGS;
+const UI_CONVENTIONS_FILE = P.UI_CONVENTIONS;
+const DELIVERABLE_FILE = P.DELIVERABLE_AUTOMATION;
 
 // Counters, printed at the end. The point of this node's redesign is cost, so the cost
 // has to be visible rather than asserted.
@@ -276,8 +277,10 @@ async function exploreExpectation(client, testCase) {
     return missing.length ? { tcId: testCase.tcId, expected, checks, missing } : null;
 }
 
-/** Author (or re-author) the spec for ONE test case. */
-async function authorSpecFor(testCase, client, registry) {
+/** Author (or re-author) the spec for ONE test case.
+ *  `correction`, when set, is appended to the prompt after a first attempt failed
+ *  spec-assertion-check.js's deterministic gate — e.g. it wrote a `ref=` selector. */
+async function authorSpecFor(testCase, client, registry, { correction } = {}) {
     await executeSteps(testCase, client, registry);
 
     const snap = await captureSnapshot(client);
@@ -307,7 +310,8 @@ async function authorSpecFor(testCase, client, registry) {
         `known_locators=\n${knownLocators}\n` +
         `page_elements=\n${toPromptLines(candidates, { limit: 25 })}\n` +
         `data_file=${DATA_PATH}\n` +
-        (finding ? `exploratory_finding=${JSON.stringify(finding)}\n` : ""));
+        (finding ? `exploratory_finding=${JSON.stringify(finding)}\n` : "") +
+        (correction ? `\nLẦN TRƯỚC BẠN VIẾT SPEC SAI: ${correction}\nSửa lại: phần tử không có trong known_locators -> ghi TODO và bỏ hành động đó, KHÔNG được tự chế selector từ ref/số trong page_elements.\n` : ""));
 
     const match = rawSpec.match(/```(?:ts|typescript|javascript|js)?\s*([\s\S]*?)```/i);
     const specContent = match ? match[1].trim() + "\n" : rawSpec.trim() + "\n";
@@ -398,7 +402,7 @@ function renderFindings(findings, stampIso) {
 // Handover contract — see memory/README.md rule 3.
 export const CONTRACT = {
     agent: "qa-automation",
-    requires: ["memory/working/deliverable-test-designer.md"],
+    requires: [P.DELIVERABLE_TEST_DESIGNER],
     produces: [DELIVERABLE_FILE, UI_CONVENTIONS_FILE, DATA_PATH],
 };
 
@@ -421,7 +425,7 @@ export async function run({ testCaseFile }) {
     // Which test cases actually need work — decided BEFORE opening a browser.
     const plan = [];
     for (const tc of testCases) {
-        const specPath = `tests/${tc.tcId}.spec.ts`;
+        const specPath = P.specFor(tc.tcId);
         plan.push({ tc, specPath, ...(await needsAuthoring(tc, specPath)) });
     }
     const todo = plan.filter(p => p.needed);
@@ -434,7 +438,7 @@ export async function run({ testCaseFile }) {
         console.log(`  Tất cả ${skipped.length} spec đã có và không có gì đổi — bỏ qua explore, không mở trình duyệt.`);
         const existing = [];
         for (const s of skipped) {
-            const r = await runTool("read_file", { path: `tests/${s.tcId}.spec.ts` });
+            const r = await runTool("read_file", { path: P.specFor(s.tcId) });
             if (!r.error) existing.push({ tcId: s.tcId, specContent: r.content });
         }
         const check = verifyAllSpecs(existing);
@@ -444,7 +448,7 @@ export async function run({ testCaseFile }) {
         });
         return {
             status: "success",
-            data: { deliverableFile: DELIVERABLE_FILE, specDir: "tests/", uiConventionsFile: UI_CONVENTIONS_FILE, dataFile: DATA_PATH, cost: stats },
+            data: { deliverableFile: DELIVERABLE_FILE, specDir: P.SPEC_DIR + "/", uiConventionsFile: UI_CONVENTIONS_FILE, dataFile: DATA_PATH, cost: stats },
             error: null,
         };
     }
@@ -491,14 +495,29 @@ export async function run({ testCaseFile }) {
         for (const item of todo) {
             // Every test case starts from the same known state.
             await mcp(client, "browser_navigate", { url: baseUrl });
-            const out = await authorSpecFor(item.tc, client, registry);
+            let out = await authorSpecFor(item.tc, client, registry);
+            let check = verifySpec({ tcId: item.tc.tcId, specContent: out.specContent });
+
+            // A spec that bakes in a transient MCP `ref=` as a selector will never match
+            // anything real and just times out at run time — worth ONE retry with the
+            // concrete violation quoted back, rather than writing it straight to disk.
+            if (!check.ok && hasEphemeralRefSelector(out.specContent)) {
+                console.warn(`  [${item.tc.tcId}] spec dùng selector "ref=" — thử sinh lại 1 lần với phản hồi lỗi.`);
+                out = await authorSpecFor(item.tc, client, registry, { correction: check.issues.join(" ") });
+                check = verifySpec({ tcId: item.tc.tcId, specContent: out.specContent });
+            }
 
             await runTool("write_file", { path: item.specPath, content: out.specContent });
             // Close the traceability chain: spec <- testcase (<- knowledge-file <- section
             // <- doc), and record the content hash so an unchanged test case can be skipped
             // next run.
             registerArtifact({ kind: "spec", ref: item.specPath, derivedFrom: [artifactId("testcase", item.tc.tcId)] });
-            upsertArtifact({ kind: "spec", ref: item.specPath, hash: testCaseHash(item.tc), status: "fresh" });
+            // Still broken after the retry -> marked "stale", NOT "fresh". A "fresh" spec
+            // here would make needsAuthoring() skip it forever on later runs (same test
+            // case content -> same hash -> "không có gì đổi"), permanently hiding a spec
+            // that cannot pass its own self-check.
+            upsertArtifact({ kind: "spec", ref: item.specPath, hash: testCaseHash(item.tc), status: check.ok ? "fresh" : "stale" });
+            if (!check.ok) console.error(`  [${item.tc.tcId}] spec vẫn CHƯA ĐẠT self-check sau khi thử lại: ${check.issues.join(" ")}`);
 
             if (out.finding) findings.push(out.finding);
             authored.push({ tcId: item.tc.tcId, why: item.why, specContent: out.specContent, fingerprint: out.fingerprint });
@@ -537,7 +556,7 @@ export async function run({ testCaseFile }) {
         status: "success",
         data: {
             deliverableFile: DELIVERABLE_FILE,
-            specDir: "tests/",
+            specDir: P.SPEC_DIR + "/",
             uiConventionsFile: UI_CONVENTIONS_FILE,
             dataFile: DATA_PATH,
             findingsFile: FINDINGS_FILE,

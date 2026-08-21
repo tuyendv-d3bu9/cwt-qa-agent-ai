@@ -19,8 +19,9 @@
 // instead (see agents/runtime/db.js artifacts).
 
 import { runTool } from "../../runtime/tools.js";
+import * as P from "../../runtime/paths.js";
 
-export const REGISTRY_PATH = "memory/working/ui-elements.json";
+export const REGISTRY_PATH = P.UI_ELEMENTS;
 
 /** Stable lookup key. Case/whitespace-insensitive so trivial wording drift still hits. */
 export function elementKey(role, name) {

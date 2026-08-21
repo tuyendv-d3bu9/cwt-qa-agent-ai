@@ -24,10 +24,11 @@ import { loadState, markStep, startRun, currentRun, finishRun } from "../agents/
 import { initDatabases } from "../agents/runtime/db.js";
 import { runRoundLoop } from "../agents/runtime/loop.js";
 import { requireInputs, verifyProduced } from "../agents/runtime/handover.js";
+import * as P from "../agents/runtime/paths.js";
 
 const MAX_ROUNDS = 3;
-const GAP_FILE = "memory/working/gap-report.md";
-const TASK_FILE = "memory/working/task-assignment.md";
+const GAP_FILE = P.GAP_REPORT;
+const TASK_FILE = P.TASK_ASSIGNMENT;
 
 const argv = process.argv.slice(2);
 // Flags are stripped before joining, otherwise "--new-run" would end up inside the
@@ -151,7 +152,7 @@ const result = await runRoundLoop({
         await writeFile(GAP_FILE, reportMarkdown, "utf8");
     },
     onPass: async (round) => {
-        await markStep("qa-analyst", { status: "done", output: "memory/working/deliverable-analyst.md" });
+        await markStep("qa-analyst", { status: "done", output: P.DELIVERABLE_ANALYST });
         await trackProgress("Completed", `PASS after ${round} round(s).`);
     },
     onFix: async (round, reportMarkdown) => {

@@ -4,7 +4,21 @@ node_modules/
 .agents
 skills-lock.json
 
+.backup/
 TODO.md
 TODO.*.md
 
 *.db
+
+# ── Run
+.qa-run/
+
+# ── Tạm thời
+memory/working/
+memory/project/manifest.json
+evidence/
+output/
+.playwright-mcp/
+
+tests/*.spec.ts
+tests/data/

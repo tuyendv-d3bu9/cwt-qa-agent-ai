@@ -19,6 +19,42 @@ Ghi lại ở đây để các node KHÔNG tự coi các điểm này là lỗi 
 - **`VOUCHER_USAGE_LIMIT_REACHED` chưa implement đầy đủ** (mục 4, trả lỗi generic "Có lỗi xảy ra") — test case cho case này ghi Expected Result đúng theo hiện trạng (lỗi generic), không viết như đã implement đầy đủ; gắn Priority phù hợp với việc đây là gap đã biết (liên quan BUG-1181 — xem `known-issues.md`).
 - **FREESHIP dùng chung logic trừ tiền với PERCENT/FIXED** (mục 8) — chưa tách riêng thành khoản giảm phí vận chuyển, liên quan trực tiếp BUG-1180 (xem `known-issues.md`).
 
+### Chính sách phí vận chuyển và miễn phí vận chuyển
+Phí vận chuyển áp dụng theo 5 khu vực (Z1-Z5). Miễn phí vận chuyển áp dụng cho đơn hàng có giá trị tiền hàng từ 800.000đ trở lên (trừ khu vực Z5). Phí vận chuyển được tính sau khi chọn địa chỉ tại bước Thanh toán.
+
+*Nguồn: `project-docs/01_Business/Bang-phi-van-chuyen.md`*
+
+### Quy tắc áp dụng mã giảm giá
+Mỗi đơn hàng chỉ được sử dụng 01 mã giảm giá (trừ trường hợp áp dụng CR-005 cho phép cộng dồn 01 mã giảm đơn hàng + 01 mã freeship). Giá trị đơn hàng tối thiểu được tính trên tổng tiền hàng sau khi trừ khuyến mãi sản phẩm, chưa bao gồm phí vận chuyển.
+
+*Nguồn: `project-docs/01_Business/Chinh-sach-Khuyen-mai-ShopGo.md`*
+
+### Bỏ bắt buộc đăng nhập tại Checkout
+Theo yêu cầu từ Sprint 22, khách vãng lai (Guest) không bắt buộc phải đăng nhập khi thực hiện thanh toán để giảm tỉ lệ bỏ giỏ hàng.
+
+*Nguồn: `project-docs/06_Communication/Bien-ban-Sprint-Planning-S24.md`*
+
+### Xử lý mã 'First-order-only' cho Guest
+**Trạng thái**: Còn treo — CHƯA có xác nhận trong tài liệu nguồn, không node nào được coi là đã chốt
+
+Hệ thống xác định khách hàng mua lần đầu dựa trên email nhập tại form giao hàng. Hiện tại khách hàng có thể lách luật bằng cách nhập email khác. Cần xác nhận lại quy trình kiểm soát với BA/PO.
+
+*Nguồn: `project-docs/06_Communication/Chat-shopgo-checkout.md`*
+
+### Quy tắc làm tròn tiền giảm giá
+**Trạng thái**: Còn treo — CHƯA có xác nhận trong tài liệu nguồn, không node nào được coi là đã chốt
+
+Hiện tại code đang sử dụng hàm `Math.floor` để làm tròn xuống đơn vị đồng. Tuy nhiên, chưa có tài liệu chính thức xác nhận quy tắc làm tròn này là đúng yêu cầu nghiệp vụ.
+
+*Nguồn: `project-docs/06_Communication/Chat-shopgo-checkout.md`*
+
+### Xử lý thay đổi giỏ hàng sau khi áp mã
+**Trạng thái**: Còn treo — CHƯA có xác nhận trong tài liệu nguồn, không node nào được coi là đã chốt
+
+Hiện tại hệ thống không tự động re-check điều kiện mã giảm giá khi khách hàng thay đổi giỏ hàng sau khi đã áp mã. Vấn đề này đang được treo (chưa chốt là bug hay feature).
+
+*Nguồn: `project-docs/06_Communication/Bien-ban-Sprint-Planning-S24.md`*
+
 ## Source
 `project-docs/03_DEV/API-spec-voucher-checkout.md`, `project-docs/06_Communication/Bien-ban-Sprint-Planning-S24.md`. Bảng bug đã biết tách riêng sang `known-issues.md` (không lặp lại ở đây).
 

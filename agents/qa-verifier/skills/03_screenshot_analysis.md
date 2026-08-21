@@ -1,7 +1,7 @@
 # Skill: Screenshot Analysis (kênh visual)
 
 ## Purpose
-Đọc ảnh chụp **sau khi** spec chạy xong (`evidence/<TC_ID>-after.jpg`) và mô tả **đúng những gì thấy trên ảnh**, để `tools/verdict-combiner.js` ghép với kết quả `expect()`.
+Đọc ảnh chụp **sau khi** spec chạy xong (`.qa-run/evidence/<TC_ID>-after.jpg`) và mô tả **đúng những gì thấy trên ảnh**, để `tools/verdict-combiner.js` ghép với kết quả `expect()`.
 
 Đây là skill duy nhất trong repo nhận ảnh (qua `callVisionLLM` của `agents/runtime/llm.js`).
 

@@ -10,6 +10,7 @@ import { createIssue } from "../runtime/jira-client.js";
 import { verifyAllDrafts } from "./tools/traceability-check.js";
 import { calculateSprintMetrics, getPreviousSprintMetrics, appendSprintMetrics } from "./tools/sprint-metrics-calculator.js";
 import { mapBugDraftToJiraIssue, mapTestCaseToJiraIssue } from "./tools/jira-mapper.js";
+import * as P from "../runtime/paths.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
 const FACT = await readFile(new URL("../../memory/semantic/fact-framework.md", import.meta.url), "utf8");
@@ -127,7 +128,7 @@ async function writeBugReportFiles(drafts) {
     const outputFiles = [];
     for (const [severity, items] of Object.entries(bySeverity)) {
         if (items.length === 0) continue;
-        const path = `output/bug-reports/${severity}.md`;
+        const path = P.bugReport(severity);
         await runTool("write_file", { path, content: items.join("\n\n") });
         outputFiles.push(path);
     }
@@ -176,7 +177,7 @@ async function runDailySummary({ testExecutionData, bugsText, manualInputs }) {
         const content = await askLLM(skill,
             `audience=${audience}\ntest_execution_data=${testExecutionData}\nbugs=${bugsText}\n` +
             `blockers=${manualInputs.blockers || ""}\nnext_actions=${manualInputs.nextActions || ""}`);
-        const path = `output/daily-summary-${audience}.md`;
+        const path = P.dailySummary(audience);
         await runTool("write_file", { path, content });
         outputFiles.push(path);
     }
@@ -190,26 +191,26 @@ async function runSprintReport({ verifierRows, testCaseDeliverable, bugsText, sp
     const totalTestCasesDesigned = countDesignedTestCases(testCaseDeliverable.content);
     const metrics = calculateSprintMetrics({ rows: verifierRows, totalTestCasesDesigned });
 
-    const historyRaw = await runTool("read_file", { path: "output/sprint-history.json" });
+    const historyRaw = await runTool("read_file", { path: P.SPRINT_HISTORY });
     const history = historyRaw.error ? [] : JSON.parse(historyRaw.content);
     const previousMetrics = getPreviousSprintMetrics(history);
 
     const skill = await loadSkill("03_sprint_report_writer.md");
     const content = await askLLM(skill,
         `sprint_metrics=${JSON.stringify(metrics)}\nprevious_sprint_metrics=${JSON.stringify(previousMetrics)}\nbug_list=${bugsText}`);
-    await runTool("write_file", { path: "output/sprint-report.md", content });
+    await runTool("write_file", { path: P.SPRINT_REPORT, content });
 
     const updatedHistory = appendSprintMetrics(history, { date: sprintDate, ...metrics });
-    await runTool("write_file", { path: "output/sprint-history.json", content: JSON.stringify(updatedHistory, null, 2) });
+    await runTool("write_file", { path: P.SPRINT_HISTORY, content: JSON.stringify(updatedHistory, null, 2) });
 
-    return ["output/sprint-report.md", "output/sprint-history.json"];
+    return [P.SPRINT_REPORT, P.SPRINT_HISTORY];
 }
 
 async function runReleaseNote({ manualInputs, bugsText }) {
     const skill = await loadSkill("04_release_note_writer.md");
     const content = await askLLM(skill, `new_features=${manualInputs.newFeatures || ""}\nbug_list=${bugsText}`);
-    await runTool("write_file", { path: "output/release-note.md", content });
-    return ["output/release-note.md"];
+    await runTool("write_file", { path: P.RELEASE_NOTE, content });
+    return [P.RELEASE_NOTE];
 }
 
 async function runRcaReport({ manualInputs, bugsText }) {
@@ -217,8 +218,8 @@ async function runRcaReport({ manualInputs, bugsText }) {
     const content = await askLLM(skill,
         `bug_description=${bugsText}\ntechnical_cause=${manualInputs.technicalCause || ""}\n` +
         `incident_timeline=${manualInputs.incidentTimeline || ""}\nfix_information=${manualInputs.fixInformation || ""}`);
-    await runTool("write_file", { path: "output/rca-report.md", content });
-    return ["output/rca-report.md"];
+    await runTool("write_file", { path: P.RCA_REPORT, content });
+    return [P.RCA_REPORT];
 }
 
 async function runCommunication({ manualInputs }) {
@@ -228,7 +229,7 @@ async function runCommunication({ manualInputs }) {
     }
     const skill = await loadSkill("06_qa_communication_writer.md");
     const content = await askLLM(skill, `template=${template}\ncontext_data=${manualInputs.communicationContext || ""}`);
-    const path = `output/communications/${template.replace(/_/g, "-")}.md`;
+    const path = P.communication(template.replace(/_/g, "-"));
     await runTool("write_file", { path, content });
     return [path];
 }
@@ -236,8 +237,8 @@ async function runCommunication({ manualInputs }) {
 async function runLogNarrative({ verifierDeliverable }) {
     const skill = await loadSkill("07_log_narrative_writer.md");
     const content = await askLLM(skill, `verifier_deliverable=${verifierDeliverable.content}`);
-    await runTool("write_file", { path: "output/qa-narrative.md", content });
-    return ["output/qa-narrative.md"];
+    await runTool("write_file", { path: P.QA_NARRATIVE, content });
+    return [P.QA_NARRATIVE];
 }
 
 // Handover contract — see memory/README.md rule 3. Output files live in output/ and
@@ -245,14 +246,14 @@ async function runLogNarrative({ verifierDeliverable }) {
 // pipeline record that is written on every run.
 export const CONTRACT = {
     agent: "qa-reporter",
-    requires: ["memory/working/deliverable-verifier.md", "memory/working/deliverable-test-designer.md"],
-    produces: ["memory/working/deliverable-reporter.md"],
+    requires: [P.DELIVERABLE_VERIFIER, P.DELIVERABLE_TEST_DESIGNER],
+    produces: [P.DELIVERABLE_REPORTER],
 };
 
 export async function run({
     reportTypes = ["bug"],
-    verifierDeliverableFile = "memory/working/deliverable-verifier.md",
-    testCaseFile = "memory/working/deliverable-test-designer.md",
+    verifierDeliverableFile = P.DELIVERABLE_VERIFIER,
+    testCaseFile = P.DELIVERABLE_TEST_DESIGNER,
     manualInputs = {},
     sprintDate = null,
     // Jira extension (agents/runtime/jira-client.js) — undefined/null by default,
@@ -337,7 +338,7 @@ export async function run({
         `## Output files\n${outputFiles.map(f => `- ${f}`).join("\n")}\n\n` +
         `## Self Count Check\n${checkSection}\n` +
         jiraSection;
-    await runTool("write_file", { path: "memory/working/deliverable-reporter.md", content: deliverableContent });
+    await runTool("write_file", { path: P.DELIVERABLE_REPORTER, content: deliverableContent });
 
-    return { status: "success", data: { deliverableFile: "memory/working/deliverable-reporter.md", outputFiles, jiraResults }, error: null };
+    return { status: "success", data: { deliverableFile: P.DELIVERABLE_REPORTER, outputFiles, jiraResults }, error: null };
 }
