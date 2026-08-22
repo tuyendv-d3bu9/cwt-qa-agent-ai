@@ -1,0 +1,29 @@
+# flows/leader-analyst.flow.yml
+#
+# Nửa đầu pipeline: QA Leader (đọc tài liệu → phân loại → phát hiện thiếu thông tin → giao
+# việc) rồi QA Analyst, có vòng review PASS/FIX/ASK giữa hai node.
+#
+# ── VÌ SAO LUỒNG NÀY VẪN LÀ SCRIPT ────────────────────────────────────────
+# Nó không diễn đạt được bằng các nguyên thuỷ khai báo, và cố nhồi vào là làm hỏng cả hai:
+#
+#   1. Vòng HỎI–ĐÁP với người, theo TỪNG CÂU: sinh `gap-report.md` có ô `**Trả lời:**` cho
+#      từng `GAP-nnn`, lần chạy sau đọc lại, câu nào còn trống thì chỉ báo ĐÚNG câu đó, câu
+#      nào đã trả lời thì XÁC NHẬN LẠI và ghi vào `decisions-log.md`. Đây là trạng thái theo
+#      từng câu hỏi, không phải "dừng chờ một file".
+#   2. Vòng review leader ↔ analyst tối đa 3 lượt với 3 verdict, trong đó FIX là ĐI LẠI cùng
+#      node kèm feedback. `branch: rework` chỉ biết đánh dấu rồi dừng.
+#   3. Quyết định mở phiên mới hay tiếp tục phiên cũ (`--new-run`), phụ thuộc cả trạng thái
+#      phiên lẫn feature đang chạy.
+#
+# Khai ở đây để `node qa.js` liệt kê và chạy được nó như mọi luồng khác — người dùng không
+# phải nhớ luồng nào là script, luồng nào là khai báo.
+
+name: leader-analyst
+title: QA Leader → QA Analyst (có vòng hỏi–đáp + review)
+description: >-
+  Mở phiên, đọc project-docs/, hỏi lại những gì thiếu, rồi phân tích yêu cầu.
+  Chạy luồng này tới PASS trước khi chạy design-to-report.
+type: script
+script: workflow/flow-2-leader-analyst.js
+command: node workflow/flow-2-leader-analyst.js "<tên task>" [--new-run]
+requires_run: false

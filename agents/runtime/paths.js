@@ -73,6 +73,8 @@ export const GAP_REPORT = `${DELIVERABLES_DIR}/gap-report.md`;
 export const PROGRESS_REPORT = `${DELIVERABLES_DIR}/progress-report.md`;
 export const IMPACT_REPORT = `${DELIVERABLES_DIR}/impact-report.md`;
 export const TEST_RESULTS = `${DELIVERABLES_DIR}/test-results.json`;
+/** Bảng giám sát mọi run — qa-leader/tools/run-supervisor.js. */
+export const SUPERVISION_REPORT = `${DELIVERABLES_DIR}/supervision.md`;
 
 export const DELIVERABLE_ANALYST = `${DELIVERABLES_DIR}/deliverable-analyst.md`;
 export const DELIVERABLE_TEST_DESIGNER = `${DELIVERABLES_DIR}/deliverable-test-designer.md`;

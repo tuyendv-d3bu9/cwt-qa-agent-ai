@@ -55,6 +55,11 @@ Hiện tại hệ thống không tự động re-check điều kiện mã giảm
 
 *Nguồn: `project-docs/06_Communication/Bien-ban-Sprint-Planning-S24.md`*
 
+### Ràng buộc mã giảm giá
+chỉ chữ hoa
+
+*Nguồn: `project-docs/03_DEV/api.md`*
+
 ## Source
 `project-docs/03_DEV/API-spec-voucher-checkout.md`, `project-docs/06_Communication/Bien-ban-Sprint-Planning-S24.md`. Bảng bug đã biết tách riêng sang `known-issues.md` (không lặp lại ở đây).
 

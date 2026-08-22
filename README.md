@@ -114,18 +114,42 @@ qa-agent-ai/
 │   │   ├── knowledge.js                 # Interface TẦNG 2 — contextFor() tra cứu deterministic, getConfig() bỏ hardcode
 │   │   ├── md-sections.js               # Thay đúng 1 mục `###` trong file tầng 3 (giữ nguyên sửa tay của người)
 │   │   ├── handover.js                  # Enforce hợp đồng bàn giao — requireInputs()/verifyProduced()
+│   │   ├── node-registry.js             # TỰ DÒ node theo quy ước (thư mục có role.md), KHÔNG theo import.
+│   │   │                                # Thêm node mới không phải sửa runner. Kiểm CONTRACT lúc dò.
+│   │   ├── yaml-lite.js                 # Parser YAML TẬP CON cho flows/*.flow.yml — zero-dep, TỪ CHỐI
+│   │   │                                # mọi cú pháp ngoài tập con thay vì đoán (parse sai = chạy sai thứ tự)
 │   │   ├── loop.js                      # runRoundLoop (PASS/FIX/ASK) + runStepLoop (step-decision), dùng chung
 │   │   ├── memory.js                    # Checkpoint/session state
 │   │   ├── cache.js                     # Cache layer (tránh gọi API trùng)
 │   │   ├── mcp-client.js                # MCP client (CÓ CHỦ Ý không nằm trong registry của tools.js)
 │   │   └── jira-client.js               # Jira REST client (cũng có chủ ý không nằm trong registry)
 │   │
+│   ├── qa-architect/                    # Node duy nhất mà SẢN PHẨM của nó là một node khác.
+│   │   ├── skills/01_node_spec_writer.md  # LLM viết BẢN KHAI (JSON), từ vựng `reads` bị chặn
+│   │   │                                  # theo danh sách export thật trong paths.js
+│   │   └── tools/
+│   │       ├── node-emitter.js          # Bản khai → index.js/role.md/skill/CONTRACT (DETERMINISTIC).
+│   │       │                            # LLM không viết index.js, không chọn đường dẫn.
+│   │       └── wiring-check.js          # Cửa gác "test xanh ≠ đã nối dây": sinh xong mà không
+│   │                                    # luồng nào gọi thì KHÔNG báo là xong
+│   ├── _qa-template/                    # Khung node + contract.md (đặc tả CONTRACT). Bỏ qua khi dò node
+│   │                                    # vì tên bắt đầu bằng `_` và vì không có role.md thật.
 │   ├── approve.js                       # Script xác nhận thủ công
+│   ├── supervise.js                     # Bảng giám sát mọi phiên
 │   ├── list-models.js                   # Liệt kê model khả dụng
 │   └── testing.js                       # Script kiểm tra kết nối
 │
+├── qa.js                                # UI TERMINAL — một lệnh duy nhất cần nhớ. Zero-dep (readline).
+│
+├── flows/                               # THỨ TỰ LUỒNG NẰM Ở ĐÂY, không nằm trong code
+│   ├── leader-analyst.flow.yml          # type: script — vòng hỏi–đáp đặc thù, giữ là script
+│   └── design-to-report.flow.yml        # khai báo: 4 bước + cửa duyệt + 3 nhánh verdict
+│
 ├── workflow/
-│   ├── flow-2-leader-analyst.js         # Luồng chính: Leader + Analyst
+│   ├── flow-file.js                     # Đọc + KIỂM TĨNH file luồng (tên node lạ → nổ TRƯỚC khi chạy)
+│   ├── flow-runner.js                   # Bộ điều phối DUY NHẤT cho luồng khai báo
+│   ├── flow-2-leader-analyst.js         # Luồng script: Leader + Analyst
+│   ├── flow-3-…js                       # SHIM gọi flow-runner (giữ lệnh cũ, một đường code)
 │   └── README.md
 │
 ├── project-docs/                        # 📂 ĐẶT TÀI LIỆU DỰ ÁN VÀO ĐÂY (nguồn thô, hiếm đổi)
@@ -136,7 +160,7 @@ qa-agent-ai/
 │   ├── 05_QA/
 │   └── 06_Communication/
 │
-├── memory/                              # Bộ nhớ 3 tầng dùng chung giữa các agent
+├── memory/                              # TRI THỨC (commit) — 5 tầng, xem memory/README.md
 │   ├── README.md                        # ĐỊNH NGHĨA CHUẨN của lớp memory: 5 tầng + hợp đồng handover.
 │   │                                    # Mọi role.md trỏ về đây, không tự định nghĩa lại.
 │   ├── semantic/                        # TẦNG 1 — phương pháp luận, đúng với MỌI dự án (commit)
@@ -149,20 +173,41 @@ qa-agent-ai/
 │   │   ├── domain-facts.md              # TẦNG 3: đổi thường xuyên, BẠN SỬA TAY ĐƯỢC. Agent chỉ thay đúng
 │   │   ├── known-issues.md              #         mục `###` phái sinh từ tài liệu vừa đổi, không ghi đè cả file
 │   │   ├── decisions-log.md             #         (git giữ lịch sử — không tự dựng versioning riêng)
+│   │   ├── ui-flows.md                  # TẦNG 3: luồng nghiệp vụ, chưng cất từ project-docs/03_DEV/UI-flow.md
 │   │   └── manifest.json                # {files: {path: hash}} — hash TỪNG FILE, để biết file nào đã đổi
-│   └── working/                         # TẦNG 4 + 5 — dữ liệu 1 lần chạy, tự sinh, xóa được (gitignored)
-│       ├── runs.db                      # TẦNG 5: phiên chạy + cửa duyệt người + lịch sử run
-│       │                                # (thay hẳn workflow.json cũ — file JSON chỉ giữ được 1 run)
-│       ├── task-assignment.md
-│       ├── deliverable-analyst.md
-│       ├── gap-report.md
-│       ├── progress-report.md
-│       └── cache/
+│
+├── tests/
+│   ├── pages/                           # CODE DÙNG LẠI — Page Object, sinh deterministic từ registry.
+│   │                                    # Locator do Playwright sinh — LLM không viết dòng nào. VẪN COMMIT.
+│   ├── steps/                           # Thư viện step của từng luồng. Viết 1 lần, 21 test case cùng gọi.
+│   ├── run-unit.mjs                     # npm run test:unit — 18 bộ, mỗi bộ MỘT tiến trình riêng
+│   └── unit/                            # 411 test. KHÔNG gọi LLM, KHÔNG gọi MCP thật → chạy offline.
+│                                        # Trước P8 chúng nằm trong thư mục TẠM và mất theo phiên làm việc.
+│
+├── .qa-run/                             # TẦNG 4 + 5 — SẢN PHẨM 1 lần chạy, xoá tự do (gitignore: .qa-run/)
+│   ├── runs.db                          # TẦNG 5: phiên chạy + cửa duyệt người + lịch sử NHIỀU run
+│   │                                    # (thay hẳn workflow.json cũ — file JSON chỉ giữ được 1 run)
+│   ├── deliverables/                    # task-assignment, gap-report, deliverable-*, ui-conventions,
+│   │                                    # ui-elements.json (registry), test-results.json, supervision.md
+│   ├── features/                        # .feature — nguồn sự thật của luồng, do LLM viết
+│   ├── tests/                           # .spec.ts SINH RA từ .feature (deterministic) + data/
+│   ├── evidence/                        # CHỈ ảnh before/after do spec tự chụp
+│   ├── artifacts/                       # artifact của Playwright: trace.zip, error-context.md
+│   ├── reports/                         # 7 loại report của qa-reporter
+│   ├── mcp/                             # output riêng của @playwright/mcp (--output-dir)
+│   └── cache/                           # cache LLM
 │
 ├── .env                                 # API key (không commit)
 ├── .env.example
 └── package.json
 ```
+
+> **3 ranh giới, không phải 2.** `memory/` = tri thức (commit) · `tests/steps|pages/` = **code dùng
+> lại** (commit) · `.qa-run/` = sản phẩm (gitignore). `tests/` được sinh tự động nhưng vẫn commit vì
+> đó là thứ viết một lần rồi mọi test case cùng gọi — gitignore nó là bỏ mất đúng nửa dùng lại được.
+>
+> Mọi đường dẫn trên khai **một chỗ duy nhất**: `agents/runtime/paths.js`. `playwright.config.ts`
+> cũng import từ đó, để runner và agent không thể bất đồng về vị trí `test-results.json`.
 
 ---
 
@@ -210,6 +255,51 @@ node agents/testing.js
 ---
 
 ## Cách chạy
+
+### Một lệnh duy nhất cần nhớ
+
+```bash
+node qa.js
+```
+
+Menu terminal, không cần nhớ lệnh nào khác. Các lệnh con dùng được trực tiếp:
+
+| Lệnh | Làm gì |
+|---|---|
+| `node qa.js flows` | liệt kê luồng đang có + lệnh chạy từng luồng |
+| `node qa.js nodes` | liệt kê node, hợp đồng vào/ra của từng node, **và node nào đang hỏng** |
+| `node qa.js next` | bước nào đang chờ ai — trả lời câu "giờ tôi làm gì tiếp" |
+| `node qa.js run <luồng> [đối số]` | chạy một luồng |
+| `node qa.js approve <node> "<tên>"` | duyệt một bước (cửa Human-Final) |
+| `node qa.js watch` | bảng giám sát MỌI phiên |
+| `node qa.js new "<mô tả>"` | **sinh một node mới từ mô tả** (`--dry-run` để xem trước) |
+| `npm run test:unit` | 18 bộ test, không gọi LLM, chạy offline |
+
+Các lệnh cũ vẫn chạy nguyên (`node workflow/flow-2-…`, `node agents/approve.js`) — chúng gọi
+đúng cùng một đường code, không có hành vi nào tồn tại hai bản.
+
+### Luồng nằm ở đâu
+
+Thứ tự các node **không** nằm trong code. Nó nằm trong `flows/*.flow.yml`:
+
+```yaml
+steps:
+  - node: qa-verifier
+    wait_for_file: TEST_RESULTS          # dừng chờ người/CI chạy playwright
+    wait_for_hint: npx playwright test --reporter=json
+    gate: qa-automation                  # cần người duyệt bước trước
+    branch_on: verdict
+    branch:
+      - value: PASS
+        action: continue
+      - value: FIX
+        action: rework
+        rework_node: qa-automation
+```
+
+`workflow/flow-runner.js` đọc file đó và gọi node qua `CONTRACT` — **thêm node mới không cần
+sửa dòng code nào trong runner**. Luồng nào thật sự đặc thù (như vòng hỏi–đáp của
+`leader-analyst`) thì vẫn là script, khai `type: script` để `qa.js` liệt kê được.
 
 ### Bước 1 — Đặt tài liệu vào `project-docs/`
 
@@ -372,7 +462,7 @@ Agent phân tích tài liệu, nhận task qua `task-assignment.md`. Có 4 skill
 | Progress | `.qa-run/deliverables/progress-report.md` | Xóa tự do |
 | Cache API | `.qa-run/cache/` | Xóa tự do — chỉ tốn quota khi không có cache |
 
-> **Tip:** Xóa `memory/working/` để reset hoàn toàn. Xóa chỉ `.qa-run/cache/` để bắt buộc gọi API thật.
+> **Tip:** Xóa `.qa-run/` để reset hoàn toàn (mất cả lịch sử run). Xóa chỉ `.qa-run/cache/` để bắt buộc gọi API thật.
 
 ---
 
@@ -442,7 +532,7 @@ node workflow/flow-2-leader-analyst.js "Task name"
 
 **Muốn bắt đầu lại từ đầu**
 ```bash
-rm -rf memory/working/
+rm -rf .qa-run/
 node workflow/flow-2-leader-analyst.js "Task name"
 ```
 

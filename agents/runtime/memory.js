@@ -175,6 +175,23 @@ export async function listRuns(limit = 10) {
 }
 
 /**
+ * Steps of ANY run, not just the current session's.
+ *
+ * loadState() is deliberately scoped to the CURRENT run — that is what the pipeline needs,
+ * and letting a node read another run's state would blur the session boundary that K exists
+ * to draw. Supervision is the one legitimate cross-run reader: qa-leader's job there is to
+ * look at every run at once (agents/qa-leader/tools/run-supervisor.js), which loadState()
+ * cannot express.
+ */
+export async function stepsOfRun(runId) {
+  if (!runId) return [];
+  return handle()
+    .prepare(`SELECT * FROM run_steps WHERE run_id = ? ORDER BY rowid`)
+    .all(runId)
+    .map(stepFromRow);
+}
+
+/**
  * Open a new run and make it the current session. Two runs of the same feature on the
  * same day get distinct ids (`…-r2`, `…-r3`) instead of colliding on the primary key.
  */

@@ -243,10 +243,15 @@ async function runRevision(task) {
 // Handover contract (memory/README.md rule 3). The workflow checks `requires`
 // before calling run(), so a missing input fails here with a clear message instead
 // of deep inside an LLM call.
+// `inputs` maps a run() PARAMETER NAME to a paths.js export name, so
+// agents/runtime/node-registry.js can call this node without knowing anything about it
+// (P7.1). Without it the workflow has to hardcode `run({ taskFile: ... })` by hand, which
+// is why the flow order used to live in a 282-line script.
 export const CONTRACT = {
     agent: "qa-analyst",
     requires: [P.TASK_ASSIGNMENT],
     produces: [P.DELIVERABLE_ANALYST],
+    inputs: { taskFile: "TASK_ASSIGNMENT" },
 };
 
 export async function run({ taskFile }) {

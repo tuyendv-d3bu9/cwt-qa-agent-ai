@@ -39,6 +39,15 @@ const KINDS = {
         type: "Fact / Change History (chưng cất từ tài liệu giao tiếp của dự án)",
         consumedBy: "Tham chiếu cho người + node phân tích/điều phối khi cần tra quyết định đã chốt.",
     },
+    // Reuses this same store rather than inventing a second one: it gets byte-preserving
+    // section splicing, provenance into the artifacts graph, and staleness propagation for
+    // free — and a project's navigation flow needs all three exactly as much as its facts do.
+    uiflow: {
+        path: P.UI_FLOWS,
+        baseTitle: "UI Flows",
+        type: "Fact / Navigation (chưng cất từ tài liệu luồng của dự án)",
+        consumedBy: "Node thiết kế test (viết Steps bám luồng thật) và tự động hoá (lái browser theo đúng đường).",
+    },
 };
 
 const STATUS_LABEL = {

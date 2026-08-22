@@ -248,6 +248,14 @@ export const CONTRACT = {
     agent: "qa-reporter",
     requires: [P.DELIVERABLE_VERIFIER, P.DELIVERABLE_TEST_DESIGNER],
     produces: [P.DELIVERABLE_REPORTER],
+    inputs: {
+        verifierDeliverableFile: "DELIVERABLE_VERIFIER",
+        testCaseFile: "DELIVERABLE_TEST_DESIGNER",
+    },
+    // `reportTypes`, `manualInputs`, `sprintDate`, `jira` are not paths → they come from
+    // the step's `with:` block. `jira.confirm` in particular must be passed explicitly on
+    // EVERY call (knowledge/jira-integration.md); there is deliberately no way to make it
+    // sticky, and a flow file declaring it counts as passing it explicitly for that flow.
 };
 
 export async function run({

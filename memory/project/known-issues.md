@@ -44,6 +44,11 @@ Danh sách các lỗi tồn đọng cần lưu ý khi kiểm thử:
 
 *Nguồn: `project-docs/05_QA/bug_export_S23.csv`*
 
+### Bug đã biết
+| B-1 | x |
+
+*Nguồn: `project-docs/05_QA/bug.csv`*
+
 ## Source
 `project-docs/05_QA/bug_export_S23.csv`.
 

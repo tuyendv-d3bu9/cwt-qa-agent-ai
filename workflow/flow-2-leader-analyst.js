@@ -17,10 +17,14 @@
 // registry (see the read_file call below) so there is one way to ask that question.
 import "dotenv/config";
 import { readFile, writeFile } from "node:fs/promises";
-import { runSetup, runReview, trackProgress } from "../agents/qa-leader/index.js";
+import { runSetup, runReview, trackProgress, distillUiFlows } from "../agents/qa-leader/index.js";
 import { run as runAnalyst, CONTRACT as ANALYST_CONTRACT } from "../agents/qa-analyst/index.js";
 import { runTool } from "../agents/runtime/tools.js";
 import { loadState, markStep, startRun, currentRun, finishRun } from "../agents/runtime/memory.js";
+import {
+    parseGapReport, renderGapReport, answersToDecisions, confirmationLines,
+} from "../agents/qa-leader/tools/gap-answers.js";
+import { storeKnowledgeSection } from "../agents/qa-leader/tools/project-knowledge-store.js";
 import { initDatabases } from "../agents/runtime/db.js";
 import { runRoundLoop } from "../agents/runtime/loop.js";
 import { requireInputs, verifyProduced } from "../agents/runtime/handover.js";
@@ -45,14 +49,70 @@ for (const { path, created } of initDatabases()) {
     if (created) console.log(`Created ${path}`);
 }
 
-// ── Read gap-report if it exists (user's answers) ──────────────
-// One read_file through the registry replaces the old access()+readFile() pair —
-// absence shows up as res.error, so no separate existence probe is needed.
-let formAnswers = null;
+// ── Read the clarification form, PER QUESTION ──────────────────
+// This used to be `formAnswers = <whole file>`, which was then appended to
+// task-assignment.md as prose. That could not tell an answered form from an untouched one,
+// so an unanswered form went straight through and the pipeline carried on as though the
+// conflicts had been resolved. Now the file is parsed (deterministically, no LLM) and each
+// question's answer is a separate, checkable thing.
+let gap = null;              // parsed form, or null when there is no form yet
+let formAnswers = null;      // answered questions rendered for the prompt; null if none
 const gapRes = await runTool("read_file", { path: GAP_FILE });
 if (!gapRes.error) {
-    formAnswers = gapRes.content;
-    console.log(`Found ${GAP_FILE} — using its content as confirmed answers.\n`);
+    gap = parseGapReport(gapRes.content);
+
+    if (gap.total === 0) {
+        // A form that parses to zero questions is a FORMAT problem, not "no questions".
+        // Saying nothing here would look identical to "everything answered".
+        console.warn(
+            `\n>> ${GAP_FILE} tồn tại nhưng KHÔNG parse được câu hỏi nào.\n` +
+            `   Định dạng phải là các khối "### GAP-nnn" với 4 trường (Vấn đề/Nguồn/Câu hỏi/Trả lời)\n` +
+            `   — xem agents/qa-leader/skills/03_info_gap_reporting.md. File sẽ bị BỎ QUA.\n`
+        );
+    } else if (gap.unanswered.length > 0) {
+        // STOP AGAIN, naming only what is still missing. Deliberately without re-running the
+        // gap-check LLM call: re-generating the form would re-ask everything, throwing away
+        // the answers already typed and costing a call to do it.
+        console.log(`\n>> Còn ${gap.unanswered.length}/${gap.total} câu CHƯA trả lời trong ${GAP_FILE}:\n`);
+        for (const q of gap.unanswered) {
+            console.log(`   [${q.id}] ${q.question.replace(/\s+/g, " ").trim()}`);
+        }
+        if (gap.answered.length) {
+            console.log(`\n   (${gap.answered.length} câu đã trả lời được giữ nguyên, không phải điền lại.)`);
+        }
+        // Rewrite the form preserving what was typed, so nothing the person wrote is lost.
+        await writeFile(GAP_FILE, renderGapReport(gap.questions), "utf8");
+        console.log(`\n   Trả lời nốt trong ${GAP_FILE} rồi chạy lại đúng lệnh này.\n`);
+        process.exit(0);
+    } else {
+        // ── All answered: CONFIRM BACK, then make each answer durable ──
+        console.log(`\nĐã nhận đủ ${gap.total}/${gap.total} câu trả lời. Tôi hiểu là:\n`);
+        for (const line of confirmationLines(gap.answered)) console.log(line);
+
+        const stampIso = new Date().toISOString();
+        let stored = 0;
+        for (const d of answersToDecisions(gap.answered, { stampIso })) {
+            // tier 3, hand-editable, git owns the history. upsertSection splices by byte
+            // range so anything the user edited by hand in this file survives untouched.
+            const res = await storeKnowledgeSection({
+                kind: "decision",
+                status: "confirmed",
+                title: d.title,
+                content: d.content,
+                sourceFile: GAP_FILE,
+                sourceHash: d.sourceRef,
+            });
+            if (res.action !== "unchanged") stored++;
+        }
+        console.log(
+            `\n   ${stored} câu trả lời đã ghi vào ${P.DECISIONS_LOG} thành tri thức bền ` +
+            `→ lần sau KHÔNG bị hỏi lại.\n`
+        );
+
+        formAnswers = gap.answered
+            .map(q => `- [${q.id}] ${q.question.trim()}\n  → ${q.answer.trim()}`)
+            .join("\n");
+    }
 }
 
 // ── Phiên hiện tại: mở run mới, hay tiếp tục run đang mở? ───────
@@ -93,11 +153,20 @@ if (analystStep?.status === "waiting_ask" && formAnswers) {
     console.log(`Resuming review from round ${analystStep.round} after ASK…\n`);
     startRound = analystStep.round;
 
-    // Append user's clarification to task-assignment so Analyst can re-read it
+    // Hand the answers to the Analyst as STRUCTURED Q→A pairs, one per line, keyed by GAP id.
+    // The old version pasted the entire gap-report file in here verbatim — questions,
+    // instructions, HTML comments and all — so the Analyst had to work out for itself which
+    // text was a question and which was an answer. And because every answer is now also
+    // recorded in decisions-log.md, this append is only a convenience for THIS round, not
+    // the place the knowledge lives.
     const current = await readFile(TASK_FILE, "utf8").catch(() => "");
     await writeFile(
         TASK_FILE,
-        current + `\n\n## User Clarification (after ASK round ${analystStep.round})\n${formAnswers}`,
+        current +
+        `\n\n## Người dùng đã xác nhận (sau ASK vòng ${analystStep.round})\n\n` +
+        `> Đây là câu trả lời ĐÃ ĐƯỢC XÁC NHẬN cho các câu hỏi làm rõ. Dùng đúng những gì ghi ở đây,\n` +
+        `> KHÔNG tự suy diễn thêm, và KHÔNG hỏi lại những điểm đã có câu trả lời.\n\n` +
+        `${formAnswers}\n`,
         "utf8"
     );
 } else {
@@ -116,6 +185,27 @@ if (analystStep?.status === "waiting_ask" && formAnswers) {
     }
 
     // status === "ready"
+
+    // Distil the flow document into tier-3 knowledge BEFORE the analyst/designer run, because
+    // both read `memory/project/ui-flows.md` and it does not exist until this runs.
+    // Deterministic (no LLM) — ui-flow-parser.js already structured the document.
+    // Also lifts `**Entry:**` into the tier-2 `base_url`, giving that config a documented
+    // source instead of only `.env`.
+    const flowDistill = await distillUiFlows();
+    if (flowDistill.status === "ok") {
+        console.log(`Luồng nghiệp vụ: ${flowDistill.flows} luồng → ${flowDistill.file}` +
+            (flowDistill.sections ? ` (${flowDistill.sections} mục cập nhật)` : " (không đổi)"));
+    } else {
+        // Not fatal: a project may not have written the flow document yet. But it IS the
+        // reason test-case Steps stay vague and automation has to invent the navigation, so
+        // it must be visible rather than silently skipped.
+        console.warn(
+            `[luồng] Bỏ qua chưng cất luồng — ${flowDistill.reason}.\n` +
+            `        Hệ quả: Steps của test case sẽ mơ hồ và qa-automation phải tự đoán đường đi.\n` +
+            `        Viết ${P.UI_FLOW_DOC} bằng lời nghiệp vụ (xem hướng dẫn trong chính file đó).`
+        );
+    }
+
     await trackProgress("Task Assignment Done", "Task assigned to QA Analyst.");
     console.log("Setup complete. Starting analyst-review loop…\n");
 }

@@ -125,6 +125,13 @@ export const CONTRACT = {
         P.DELIVERABLE_TEST_DESIGNER,
     ],
     produces: [DELIVERABLE_FILE],
+    inputs: {
+        testResultsFile: "TEST_RESULTS",
+        uiConventionsFile: "UI_CONVENTIONS",
+        testCaseFile: "DELIVERABLE_TEST_DESIGNER",
+    },
+    // `vlmAll` is NOT here — it is not a path. Non-path arguments come from the `with:`
+    // block of the step in flows/*.flow.yml.
 };
 
 /**

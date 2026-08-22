@@ -206,6 +206,66 @@ async function performAction({ mcp, decision, element, step }) {
     }
 }
 
+/**
+ * Retry the steps a previous walk could not do (P3.4).
+ *
+ * A step goes unimplemented for two very different reasons, and only one is worth retrying:
+ *   - the walk never REACHED it (an earlier step failed, so this one was never attempted) —
+ *     retryable: fix the earlier step and the rest of the journey opens up;
+ *   - the walk reached it and the element genuinely is not there — not retryable by walking
+ *     again, it needs a human to look at the flow document or the app.
+ *
+ * Blindly re-walking the whole flow would pay for the steps that already succeeded and
+ * would hit the same wall at the same place. This restarts from the entry (state has to be
+ * rebuilt) but only ASKS about the steps still missing, and stops the moment it fails to
+ * make progress — a retry that cannot get further than last time must not loop.
+ *
+ * @param {{flow, previous, mcp, snapshot, resolve, ask, log?}} o
+ *   `previous` is a prior walkFlow() result.
+ */
+export async function retryUnreached({ flow, previous, mcp, snapshot, resolve, ask, log = () => { } }) {
+    const done = new Set((previous?.visited ?? []).map(v => v.step));
+    const remaining = (flow?.steps ?? []).filter(s => !done.has(s.n));
+
+    if (remaining.length === 0) {
+        return { ...previous, retried: 0, progressed: 0, note: "không còn bước nào chưa đi" };
+    }
+    if (previous?.stoppedAt === null || previous?.stoppedAt === undefined) {
+        // Nothing blocked last time, so there is nothing a retry can unblock.
+        return { ...previous, retried: 0, progressed: 0, note: "lần trước không bị chặn ở đâu" };
+    }
+
+    log(`  Thử lại ${remaining.length} bước chưa đi được (từ bước ${previous.stoppedAt}).`);
+    const out = await walkFlow({ flow, mcp, snapshot, resolve, ask, log });
+
+    const progressed = out.visited.length - (previous.visited?.length ?? 0);
+    if (progressed <= 0) {
+        log(`  Thử lại KHÔNG tiến thêm bước nào — dừng, không lặp. Cần người xem tài liệu luồng hoặc app.`);
+    } else {
+        log(`  Thử lại đi thêm được ${progressed} bước.`);
+    }
+
+    return {
+        ...out,
+        retried: remaining.length,
+        progressed,
+        note: progressed > 0 ? `đi thêm ${progressed} bước` : "không tiến thêm — cần người xem",
+    };
+}
+
+/**
+ * Which flow steps still have no verified element after walking.
+ * This is the list the Gherkin writer must be told it CANNOT use, and the list a human has
+ * to act on. Returned separately from `findings` because it is a different question:
+ * findings say what happened, this says what is still missing.
+ */
+export function unreachedSteps({ flow, visited }) {
+    const done = new Set((visited ?? []).map(v => v.step));
+    return (flow?.steps ?? [])
+        .filter(s => !done.has(s.n))
+        .map(s => ({ n: s.n, text: s.text, kind: s.kind }));
+}
+
 /** Human-readable record of the walk, for exploratory-findings.md. */
 export function renderWalk({ flow, visited, findings, stoppedAt, screens }) {
     const lines = [

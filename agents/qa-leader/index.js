@@ -11,8 +11,12 @@ import { callLLM } from "../runtime/llm.js";
 import { convertDirectory } from "./tools/convert-to-md.js";
 import { hashProjectDocsPerFile, diffManifest } from "./tools/project-docs-hash.js";
 import { storeKnowledgeSection, flagKnowledgeFromRemovedSource } from "./tools/project-knowledge-store.js";
-import { putTerm, putComponent, putField, putConfig } from "../runtime/knowledge.js";
+import { putTerm, putComponent, putField, putConfig, getConfig } from "../runtime/knowledge.js";
 import { computeImpact, renderImpactReport } from "./tools/impact-analysis.js";
+import { listRuns, stepsOfRun } from "../runtime/memory.js";
+import { superviseRuns, renderDashboard } from "./tools/run-supervisor.js";
+import { parseUiFlows } from "./tools/ui-flow-parser.js";
+import { createHash } from "node:crypto";
 import * as P from "../runtime/paths.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
@@ -380,6 +384,26 @@ async function step4_assignTask(task) {
 // PUBLIC EXPORTS — called by the workflow, not by other agents
 // ─────────────────────────────────────────────
 
+// Handover contract (P7.1). qa-leader was the ONE node without a CONTRACT, which meant a
+// generic runner could not include it in a declarative flow at all.
+//
+// Two things are unusual here and both are declared rather than special-cased in the runner:
+//   `entry: "runSetup"` — this node has five public functions (runSetup, runReview,
+//   trackProgress, distillUiFlows, supervise), not one `run`. The flow file picks the
+//   entry it wants; "runSetup" is the pipeline's starting point.
+//   `requires: []`  — its input is the task STRING, not a file. Nothing to check on disk.
+//
+// `produces` lists TASK_ASSIGNMENT only. runSetup can also legitimately end at
+// `waiting_input` having written GAP_REPORT instead — that is not a broken promise, so
+// flow-runner.js checks `produces` only for statuses that mean "finished".
+export const CONTRACT = {
+    agent: "qa-leader",
+    entry: "runSetup",
+    requires: [],
+    produces: [P.TASK_ASSIGNMENT],
+    inputs: {},
+};
+
 /**
  * runSetup — Steps 1-4 (convert -> classify -> gap-check -> assign task).
  * Returns:
@@ -448,4 +472,109 @@ export async function trackProgress(stage, note) {
     const skill = await loadSkill("06_workflow_progress_tracking.md");
     const content = await askLLM(skill, `workflow_stage=${stage}\nnote=${note}`);
     await runTool("write_file", { path: P.PROGRESS_REPORT, content });
+}
+
+/**
+ * distillUiFlows — `project-docs/03_DEV/UI-flow.md` → tier-3 `memory/project/ui-flows.md`.
+ *
+ * NO LLM. `ui-flow-parser.js` already turned the document into structure (flow name, entry
+ * URL, ordered steps), so there is nothing left to interpret. Paying a model to re-read
+ * something already parsed would add cost and a chance of paraphrasing the navigation
+ * backbone — the one thing that must not drift.
+ *
+ * Three outputs, three consumers:
+ *   tier 3 `ui-flows.md`  → qa-test-designer writes Steps that name real flow steps
+ *   tier 2 `components`   → queryable "which screens does this project have"
+ *   tier 2 `base_url`     → the config every node reads instead of hardcoding a URL
+ *
+ * `**Entry:**` becoming `base_url` matters: until now `base_url` could only come from `.env`
+ * or a manual putConfig, so a fresh clone had no way to know where the app lives even though
+ * the project documentation says so on its second line.
+ */
+export async function distillUiFlows({ docPath = P.UI_FLOW_DOC } = {}) {
+    const doc = await runTool("read_file", { path: docPath });
+    if (doc.error) {
+        return { status: "skipped", reason: `không đọc được ${docPath}: ${doc.error}`, flows: 0, problems: [] };
+    }
+
+    const { flows, problems } = parseUiFlows(doc.content);
+    for (const p of problems) console.warn(`  [ui-flow] ${p}`);
+    if (flows.length === 0) {
+        return { status: "skipped", reason: "không tìm thấy flow nào trong tài liệu", flows: 0, problems };
+    }
+
+    const hash = createHash("sha256").update(doc.content).digest("hex").slice(0, 16);
+    let sections = 0;
+    let components = 0;
+
+    for (const flow of flows) {
+        // One `###` section per flow. Steps are rendered verbatim — the whole value of this
+        // file is that it says what the document says, in the words the document used.
+        const body = [
+            flow.entry ? `**Điểm bắt đầu:** ${flow.entry}` : `**Điểm bắt đầu:** (tài liệu không nêu)`,
+            ``,
+            `| # | Bước | Loại |`,
+            `|---|---|---|`,
+            ...flow.steps.map(s => `| ${s.n} | ${s.text.replace(/\|/g, "\\|")} | ${s.kind} |`),
+            ``,
+            `> Đây là **ý định nghiệp vụ**, không phải locator. Tên/role/locator thật của phần tử do`,
+            `> \`qa-automation\` tìm bằng MCP lúc chạy (\`tools/flow-walker.js\`) và lưu ở registry.`,
+        ].join("\n");
+
+        const res = await storeKnowledgeSection({
+            kind: "uiflow",
+            status: "confirmed",
+            title: `Luồng: ${flow.name}`,
+            content: body,
+            sourceFile: docPath,
+            sourceHash: hash,
+        });
+        if (res.action !== "unchanged") sections++;
+
+        // Tier 2: the flow itself is a queryable component of the system under test.
+        putComponent({
+            name: flow.name,
+            kind: "module",
+            ref: flow.entry ?? null,
+            description: `Luồng nghiệp vụ ${flow.steps.length} bước, chưng cất từ ${docPath}`,
+            source_ref: docPath,
+        });
+        components++;
+
+        // De-hardcoding: the URL now has a documented source of truth.
+        if (flow.entry && !getConfig("base_url", null)) {
+            putConfig({
+                key: "base_url",
+                value: flow.entry,
+                description: `Lấy từ **Entry:** của luồng "${flow.name}" trong ${docPath}`,
+                source_ref: docPath,
+            });
+        }
+    }
+
+    return { status: "ok", flows: flows.length, sections, components, problems, file: P.UI_FLOWS };
+}
+
+/**
+ * supervise — look at EVERY run at once and say who has to act next.
+ *
+ * This is the Leader doing the one thing its name implies and previously could not: watch
+ * the other agents. It became possible only once run state moved from a single JSON file
+ * (which held exactly one run, `run_id` permanently null) into `.qa-run/runs.db`.
+ *
+ * Entirely deterministic — no LLM. "Is this run stuck?" and "who must act?" are rules over
+ * recorded facts (status, timestamps, approval flags), each with one right answer. Asking a
+ * model would add cost and the chance of a different answer each time for no gain.
+ *
+ * @param {{limit?: number, staleHours?: number, nowMs?: number, write?: boolean}} opts
+ */
+export async function supervise({ limit = 20, staleHours = 24, nowMs = Date.now(), write = true } = {}) {
+    const runs = await listRuns(limit);
+    const result = await superviseRuns({ runs, loadSteps: stepsOfRun, nowMs, staleHours });
+    const markdown = renderDashboard(result);
+    if (write) {
+        const res = await runTool("write_file", { path: P.SUPERVISION_REPORT, content: markdown });
+        if (res.error) console.error(`  [supervise] không ghi được ${P.SUPERVISION_REPORT}: ${res.error}`);
+    }
+    return { ...result, markdown, reportFile: write ? P.SUPERVISION_REPORT : null };
 }

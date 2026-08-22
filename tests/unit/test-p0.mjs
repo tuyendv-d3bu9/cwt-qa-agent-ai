@@ -1,0 +1,89 @@
+// Test P0.2 (ui-flow-parser) + P0.6 (money). KHÔNG gọi LLM.
+import path from "node:path";
+const abs = (p) => "file:///" + path.resolve(process.cwd(), p).split(path.sep).join("/");
+const F = await import(abs("agents/qa-leader/tools/ui-flow-parser.js"));
+const M = await import(abs("agents/runtime/money.js"));
+
+const P = [];
+const chk = (n, c, e = "") => P.push([n, c, e]);
+
+// ─────────── P0.6: so tiền theo SỐ, bỏ đơn vị ───────────
+const same = [
+    ["150.000 ₫", "150000đ"],
+    ["150.000 ₫", "150.000 VNĐ"],
+    ["10.000đ", "10.000 ₫"],          // đúng ca làm TC-D-012 fail
+    ["799.999đ", "799999"],
+    ["1.234.567 ₫", "1234567 VND"],
+];
+for (const [a, b] of same) {
+    chk(`"${a}" == "${b}"`, M.sameMoney(a, b), `${M.parseMoney(a)} vs ${M.parseMoney(b)}`);
+}
+chk("số KHÁC nhau thì vẫn phải KHÁC", !M.sameMoney("150.000đ", "150.001đ"));
+chk("non-breaking space (web hay dùng, vô hình trong diff) không làm lệch",
+    M.sameMoney("150.000 ₫", "150000"), JSON.stringify(M.parseMoney("150.000 ₫")));
+chk("không có số -> null, KHÔNG phải 0 ('không có' không được thành 0đ)",
+    M.parseMoney("Không có") === null && M.parseMoney("") === null);
+chk("không parse được thì KHÔNG coi là bằng nhau", !M.sameMoney("abc", "abc"));
+chk("số thập phân KHÔNG bị hiểu thành nghìn", M.parseMoney("1.5") === 1.5 && M.parseMoney("0,75") === 0.75);
+chk("phân cách nghìn nhận đúng", M.parseMoney("1.234") === 1234 && M.parseMoney("12,345,678") === 12345678);
+chk("moneyIn: lấy hết số tiền trên 1 dòng UI thật",
+    JSON.stringify(M.moneyIn("150.000 ₫ 199.000 ₫")) === JSON.stringify([150000, 199000]),
+    JSON.stringify(M.moneyIn("150.000 ₫ 199.000 ₫")));
+chk("containsMoney: tìm giá trị bất kể cách viết",
+    M.containsMoney("Tạm tính: 150.000 ₫", "150000") && !M.containsMoney("Tạm tính: 150.000 ₫", "160000"));
+
+// ─────────── P0.2: parser luồng ───────────
+const doc = `
+# UI Flow
+
+> Ví dụ trong code block KHÔNG được tính là flow thật:
+\`\`\`markdown
+## Flow: ví dụ mẫu
+**Entry:** https://example.com/
+1. bước mẫu
+\`\`\`
+
+## Flow: Áp mã giảm giá
+**Entry:** https://cwshopgo.github.io/
+
+1. Trang chủ — bấm "Thêm vào giỏ" trên thẻ sản phẩm
+2. Bấm "Thanh toán" trên thanh tabbar
+3. Nhập mã vào ô "Mã giảm giá" rồi bấm "Áp dụng"
+4. Kiểm tra tổng tiền đã giảm
+
+## CHƯA RÕ
+
+1. Câu hỏi này KHÔNG phải bước của flow
+2. Câu hỏi khác
+`;
+const { flows, problems } = F.parseUiFlows(doc);
+chk(">>> chỉ 1 flow: ví dụ trong code block bị bỏ qua", flows.length === 1, JSON.stringify(flows.map(f => f.name)));
+chk(">>> heading khác đóng flow: 2 câu hỏi ở 'CHƯA RÕ' KHÔNG bị tính thành bước",
+    flows[0].steps.length === 4, JSON.stringify(flows[0].steps.map(s => s.n + ':' + s.text)));
+chk("entry đọc đúng", flows[0].entry === "https://cwshopgo.github.io/");
+chk(">>> tên trong ngoặc kép chỉ là GỢI Ý cho AI, không phải selector", JSON.stringify(F.hintsOf(flows[0])) === JSON.stringify(["Thêm vào giỏ","Thanh toán","Mã giảm giá","Áp dụng"]), JSON.stringify(F.hintsOf(flows[0])));
+chk("bước 'Kiểm tra …' là check, không phải action (đừng đi click nó)",
+    flows[0].steps[3].kind === "check" && F.actionSteps(flows[0]).length === 3,
+    JSON.stringify(flows[0].steps.map(s => s.kind)));
+chk("doc sạch -> không problem", problems.length === 0, JSON.stringify(problems));
+
+// action step không nêu tên phần tử -> PHẢI báo, không đoán
+const bad = F.parseUiFlows('## Flow: X\n**Entry:** https://a.b/\n\n1. nhập mã vào ô mã giảm giá rồi áp dụng\n');
+chk(">>> bước viết bằng LỜI NGHIỆP VỤ (không ngoặc kép) là BÌNH THƯỜNG, không phải lỗi", bad.problems.length === 0, JSON.stringify(bad.problems));
+
+// thiếu Entry / số bước nhảy
+const b2 = F.parseUiFlows('## Flow: Y\n\n1. bấm "A"\n3. bấm "B"\n');
+chk("thiếu Entry + số bước nhảy -> báo cả 2", b2.problems.length >= 2, JSON.stringify(b2.problems));
+chk("không có flow nào -> báo rõ", F.parseUiFlows("# chả có gì").problems.some(p => p.includes("Không tìm thấy flow")));
+
+// ─────────── tài liệu THẬT của dự án ───────────
+const { readFileSync } = await import("node:fs");
+const real = F.parseUiFlows(readFileSync("project-docs/03_DEV/UI-flow.md", "utf8"));
+chk("UI-flow.md thật: đọc được đúng 1 flow", real.flows.length === 1, JSON.stringify(real.flows.map(f => f.name)));
+chk("UI-flow.md thật: 5 bước, entry đúng", real.flows[0].steps.length === 5 && real.flows[0].entry === "https://cwshopgo.github.io/", real.flows[0].steps.length + " bước");
+console.log("   [thật] gợi ý tên (có thể rỗng): " + JSON.stringify(F.hintsOf(real.flows[0])));
+console.log("   [thật] problems: " + (real.problems.length ? JSON.stringify(real.problems) : "(không có)"));
+
+let bad2 = 0;
+for (const [n, c, e] of P) { if (!c) bad2++; console.log((c ? "  PASS  " : "  >>FAIL ") + n + (e && !c ? "\n         => " + e : "")); }
+console.log(bad2 === 0 ? `\n${P.length}/${P.length} ĐÚNG` : `\n${bad2}/${P.length} SAI`);
