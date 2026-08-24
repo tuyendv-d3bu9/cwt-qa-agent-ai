@@ -45,6 +45,43 @@ chk("locator giữ NGUYÊN tên gốc có dấu (browser khớp theo tên thật
     po.content.includes("name: 'Mã giảm giá'"));
 chk("có cảnh báo ĐỪNG SỬA TAY (vì sẽ bị ghi đè)", po.content.includes("ĐỪNG SỬA TAY"));
 
+// ─────────── LẦN CHẠY THẬT 2026-08-24: locator KHÔNG có tiền tố `page.` ───────────
+//
+// `browser_generate_locator` trả về locator không tiền tố: `getByRole('button', {...})`,
+// `locator('#btn-add-prod-001')`. Bản cũ của asMember() chỉ đổi `page.` → `this.page.`, nên
+// dạng không tiền tố đi nguyên vào file .ts:
+//     get cuahangButton(): Locator { return getByRole('button', ...); }
+// `getByRole` là biến không tồn tại — file không compile, và lỗi chỉ nổ ở tsc/lúc chạy spec,
+// cách chỗ sai (registry) vài bước, nên rất khó lần về nguyên nhân.
+{
+    const raw = PO.emitPageObject({
+        registry: {
+            elements: {
+                'button|cửa hàng': { role: "button", name: "Cửa hàng", locator: "getByRole('button', { name: 'Cửa hàng' })" },
+                'button|thêm vào giỏ': { role: "button", name: "Thêm vào giỏ", locator: "locator('#btn-add-prod-001')" },
+                'textbox|mã giảm giá': { role: "textbox", name: "Mã giảm giá", locator: "page.getByLabel('Mã giảm giá')" },
+                'button|áp dụng': { role: "button", name: "Áp dụng", locator: "this.page.getByRole('button', { name: 'Áp dụng' })" },
+                // registry cũ trên đĩa còn nguyên văn markdown của MCP
+                'button|thanh toán': { role: "button", name: "Thanh toán", locator: "### Result\ngetByRole('button', { name: 'Thanh toán' })" },
+            },
+        },
+        className: "AppPage",
+    });
+    const bodies = [...raw.content.matchAll(/return ([^;]+);/g)].map(m => m[1].trim());
+    chk(">>> MỌI accessor đều là biểu thức trên this.page (không có `return getByRole(...)` trần)",
+        bodies.length === 5 && bodies.every(b => b.startsWith("this.page.")), JSON.stringify(bodies));
+    chk("locator không tiền tố -> được thêm this.page.",
+        bodies.includes("this.page.getByRole('button', { name: 'Cửa hàng' })") &&
+        bodies.includes("this.page.locator('#btn-add-prod-001')"), JSON.stringify(bodies));
+    chk("tiền tố page. -> đổi thành this.page. (không thành this.page.page.)",
+        bodies.includes("this.page.getByLabel('Mã giảm giá')") && !raw.content.includes("this.page.page."));
+    chk("đã là this.page. thì để nguyên, không nhân đôi",
+        bodies.filter(b => b === "this.page.getByRole('button', { name: 'Áp dụng' })").length === 1, JSON.stringify(bodies));
+    chk(">>> registry cũ còn nguyên văn '### Result' cũng được bóc vỏ, không lọt vào .ts",
+        !raw.content.includes("### Result") && bodies.includes("this.page.getByRole('button', { name: 'Thanh toán' })"),
+        JSON.stringify(bodies));
+}
+
 {
     const empty = PO.emitPageObject({ registry: { elements: {} } });
     chk("registry rỗng -> vẫn sinh file hợp lệ + NÓI RÕ vì sao rỗng và cách sửa",

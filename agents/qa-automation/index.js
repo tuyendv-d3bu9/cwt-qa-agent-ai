@@ -27,7 +27,8 @@ import {
     toPromptLines, structureFingerprint, interactiveNodes,
 } from "./tools/snapshot-parser.js";
 import {
-    loadRegistry, saveRegistry, putElement, getElement, isStale, stamp, REGISTRY_PATH,
+    loadRegistry, saveRegistry, putElement, getElement, isStale, stamp,
+    cleanLocator, resolvedElements, REGISTRY_PATH,
 } from "./tools/ui-element-registry.js";
 import { planSteps, WHITELIST } from "./tools/step-planner.js";
 import { exportTestCases, buildDataset, DATA_PATH } from "./tools/testcase-exporter.js";
@@ -109,22 +110,40 @@ async function mcp(client, name, args = {}) {
 }
 
 /**
- * Capture a snapshot WITHOUT routing it through the prompt: browser_snapshot writes it
- * to a file (a documented parameter we were not using), our parser reads the file, and
- * only the filtered subset ever reaches the LLM.
- * Falls back to the in-response snapshot if the filename form returns nothing — the
- * filename behaviour has not been verified against a live MCP yet.
+ * Capture a snapshot. The MCP RESPONSE is the source of truth; the file is only a copy
+ * kept on disk for debugging.
+ *
+ * LỖI THẬT ĐÃ XẢY RA (2026-08-24) — luồng dừng ở bước 3. Bản cũ gọi
+ * `browser_snapshot({ filename })` rồi ĐỌC LẠI FILE. Khi MCP không ghi file (hoặc ghi chậm,
+ * hoặc tham số `filename` không được hỗ trợ), `read_file` vẫn thành công — nó đọc file CỦA
+ * BƯỚC TRƯỚC còn nằm trên đĩa. Không có lỗi nào được báo. Kết quả: bước 1 click "Thêm vào
+ * giỏ" OK, bước 2 click "Thanh toán" OK, bước 3 cần ô "Mã giảm giá" thì snapshot đưa vào
+ * matcher VẪN LÀ TRANG CHỦ — nên matcher (đúng luật "không đoán bừa") trả `found: false` và
+ * cả luồng dừng. Một cache cũ đội lốt trạng thái hiện tại.
+ *
+ * Đọc từ response KHÔNG làm tăng token: đây là lời gọi MCP ở tầng CODE, snapshot chỉ vào
+ * prompt qua phần đã lọc mà hàm này trả về (xem `filterByKeywords`).
  */
 async function captureSnapshot(client) {
     let text = "";
     try {
-        const res = await mcp(client, "browser_snapshot", { filename: SNAPSHOT_FILE });
-        const read = await runTool("read_file", { path: SNAPSHOT_FILE });
-        text = read.error ? snapshotTextFrom(res) : read.content;
-    } catch {
+        // Gọi KHÔNG có `filename`: có `filename` thì một số bản MCP trả về câu "đã lưu vào
+        // ..." thay vì chính cây a11y, và mình cần cây a11y trong response.
         const res = await mcp(client, "browser_snapshot", {});
-        text = snapshotTextFrom(res);
+        text = snapshotTextFrom(res).trim();
+    } catch (err) {
+        console.error(`  [snapshot] browser_snapshot lỗi: ${err.message}`);
     }
+
+    if (text) {
+        // Ghi đè bản trên đĩa NGAY, để file luôn là snapshot mới nhất chứ không phải bẫy
+        // cho lần đọc sau.
+        const w = await runTool("write_file", { path: SNAPSHOT_FILE, content: text });
+        if (w.error) console.warn(`  [snapshot] không ghi được ${SNAPSHOT_FILE}: ${w.error}`);
+    } else {
+        console.warn(`  [snapshot] MCP không trả về cây a11y — KHÔNG dùng file cũ trên đĩa làm thay (file cũ là trạng thái của bước trước).`);
+    }
+
     const parsed = parseSnapshot(text);
     if (parsed.unparsed.length) {
         console.warn(`  [snapshot] ${parsed.unparsed.length} dòng không parse được — kiểm tra lại format a11y tree (snapshot-parser.js).`);
@@ -152,7 +171,7 @@ function synthesizeLocator(role, name) {
 async function resolveElement(client, registry, { role, name }) {
     if (!name) return null;
     const cached = getElement(registry, role, name) ?? (
-        role ? null : Object.values(registry.elements).find(e => e.name === name && e.locator)
+        role ? null : resolvedElements(registry).find(e => e.name === name)
     );
     if (cached?.locator) return { ...cached, from: "registry" };
 
@@ -177,16 +196,25 @@ async function resolveElement(client, registry, { role, name }) {
     }
 
     let locator = null;
+    let source = "browser_generate_locator";
     try {
         const gen = await mcp(client, "browser_generate_locator", { target: ref, element: name });
-        locator = snapshotTextFrom(gen).trim() || null;
+        // `cleanLocator` chứ không phải `.trim()`: MCP bọc locator trong markdown
+        // ("### Result\ngetByRole(...)"), và chuỗi thô đó bị registry loại sạch.
+        locator = cleanLocator(snapshotTextFrom(gen));
+        if (!locator) {
+            locator = synthesizeLocator(foundRole, name);
+            source = "synthetic";
+            console.warn(`  [locator] "${name}": MCP không trả về locator dùng được — dùng locator suy từ role+name.`);
+        }
     } catch (err) {
         // Fallback: build standard Playwright locator from role and name
         locator = synthesizeLocator(foundRole, name);
+        source = "synthetic";
     }
 
-    const stored = putElement(registry, { role: foundRole, name, locator, ref, source: "browser_find" });
-    return locator ? { ...stored, from: "mcp" } : null;
+    const stored = putElement(registry, { role: foundRole, name, locator, ref, source });
+    return stored.locator ? { ...stored, from: source === "synthetic" ? "synthetic" : "mcp" } : null;
 }
 
 /**
@@ -595,8 +623,10 @@ async function authorSpecFor(testCase, client, registry, { correction } = {}) {
 
     // Tier 3 — the one genuinely judgement-y call: which of the resolved elements maps to
     // which step, and how Expected Result becomes an assertion.
-    const knownLocators = Object.values(registry.elements)
-        .filter(e => e.locator)
+    // `resolvedElements` chứ không phải filter truthy: nó bóc vỏ markdown của MCP, nên chuỗi
+    // đi vào prompt là locator thật. Trước đây một registry cũ có thể đưa "### Result\n..."
+    // vào `known_locators` và LLM sẽ copy nguyên văn vào file spec.
+    const knownLocators = resolvedElements(registry)
         .map(e => `- ${e.role} "${e.name}" -> ${e.locator}`)
         .join("\n");
 
@@ -823,7 +853,7 @@ export async function run({ testCaseFile }) {
         if (flow) {
             console.log(`  Đi luồng "${flow.name}" (${flow.steps.length} bước) để nạp phần tử của MỌI màn hình…`);
             walk = await walkTheFlow({ client, registry, flow });
-            const learned = Object.values(registry.elements).filter(e => e.locator).length;
+            const learned = resolvedElements(registry).length;
             console.log(`  Đi được ${walk.visited.length}/${flow.steps.length} bước, qua ${walk.screens} trạng thái trang; registry có ${learned} phần tử có locator.`);
             if (walk.stoppedAt !== null) {
                 // Loud, because every spec for a later step will now be missing its locators
@@ -927,7 +957,7 @@ export async function run({ testCaseFile }) {
         const uiConventions = await askLLM(await loadSkill("03_ui_conventions_writer.md"),
             `base_url=${baseUrl}\n` +
             `page_fingerprint=${seedFingerprint}\n` +
-            `resolved_elements=\n${Object.values(registry.elements).filter(e => e.locator).map(e => `- ${e.role} "${e.name}" -> ${e.locator}`).join("\n")}`);
+            `resolved_elements=\n${resolvedElements(registry).map(e => `- ${e.role} "${e.name}" -> ${e.locator}`).join("\n")}`);
         await runTool("write_file", { path: UI_CONVENTIONS_FILE, content: uiConventions });
     } finally {
         try {
