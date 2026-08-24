@@ -58,6 +58,37 @@ chứng việc hệ thống **tự** gỡ mã (bước 6 của luồng thứ 2).
 
 *Nguồn: `project-docs/03_DEV/UI-flow.md`*
 
+### Đưa app về trạng thái sạch
+
+**Chỉ cần vào lại trang là sạch. Không có chức năng reset nào phải bấm.**
+Web test **không có database** — mọi thứ (giỏ hàng, mã đang áp) chỉ nằm trong phiên trình duyệt.
+
+Hai hệ quả trái ngược nhau, và **cả hai đều quan trọng**:
+
+| | |
+|---|---|
+| **Giữa các test case** | Mở lại Entry là đủ để có giỏ trống. Không cần tìm nút "xoá giỏ", không cần clear localStorage. |
+| **GIỮA CÁC BƯỚC trong cùng một luồng** | **TUYỆT ĐỐI không điều hướng lại.** Vào lại trang giữa luồng = **mất giỏ hàng vừa tạo**, và những bước sau chạy trên một giỏ trống. |
+
+Chỗ thứ hai không phải lo xa: đúng lỗi đó đã xảy ra thật ngày 2026-08-17. Một rule trong
+`step-planner` khớp cả bước "Vào checkout" (câu không có URL nào) rồi gọi `browser_navigate`
+về trang chủ **giữa luồng** — đó là một trong ba nguyên nhân gốc của 9 test lỗi và 5 ca timeout.
+Với app không có DB thì một lần điều hướng sai là mất toàn bộ trạng thái đã dựng.
+
+### Mã giảm giá đang áp — nhìn vào đâu để biết
+
+Ngay tại chỗ nhập mã: khi mã được kích hoạt thì có trạng thái **"Đang kích hoạt giảm giá"** và
+ngay dưới đó là nút **"Gỡ mã"**.
+
+Nên "mã còn đang áp hay không" là quan sát được trực tiếp — dùng cho cả gỡ mã bằng tay lẫn kiểm
+chứng việc hệ thống **tự** gỡ mã (bước 6 của luồng thứ 2).
+
+*(Hai tên trong ngoặc kép chỉ là **gợi ý** cho AI, không phải selector — xem bảng đầu file.)*
+
+---
+
+*Nguồn: `project-docs/03_DEV/UI-flow.md`*
+
 ### Luồng: Sửa giỏ hàng sau khi đã áp mã (hệ thống tự gỡ mã)
 **Điểm bắt đầu:** https://cwshopgo.github.io/
 

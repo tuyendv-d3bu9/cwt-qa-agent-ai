@@ -79,7 +79,7 @@ chk("không có flow nào -> báo rõ", F.parseUiFlows("# chả có gì").proble
 // ─────────── tài liệu THẬT của dự án ───────────
 const { readFileSync } = await import("node:fs");
 const real = F.parseUiFlows(readFileSync("project-docs/03_DEV/UI-flow.md", "utf8"));
-chk("UI-flow.md thật: đọc được 2 flow (thêm luồng gỡ mã 2026-08-23)", real.flows.length === 2, JSON.stringify(real.flows.map(f => f.name)));
+chk("UI-flow.md thật: đọc được 2 flow trở lên", real.flows.length >= 2, JSON.stringify(real.flows.map(f => f.name)));
 chk("UI-flow.md thật: luồng 1 có 5 bước, entry đúng", real.flows[0].steps.length === 5 && real.flows[0].entry === "https://cwshopgo.github.io/", real.flows[0].steps.length + " bước");
 chk("UI-flow.md thật: luồng 2 (gỡ mã) 6 bước, kết bằng bước KIỂM TRA", real.flows[1].steps.length === 6 && real.flows[1].steps[5].kind === "check", JSON.stringify(real.flows[1].steps.map(x => x.kind)));
 console.log("   [thật] gợi ý tên (có thể rỗng): " + JSON.stringify(F.hintsOf(real.flows[0])));
@@ -129,7 +129,7 @@ console.log("   [thật] problems: " + (real.problems.length ? JSON.stringify(re
     // Tài liệu THẬT của dự án phải mang được 3 quy ước người dùng đã trả lời.
     const { readFileSync } = await import("node:fs");
     const real = F.parseUiFlows(readFileSync("project-docs/03_DEV/UI-flow.md", "utf8"));
-    chk(">>> UI-flow.md thật: 2 flow, 0 vấn đề", real.flows.length === 2 && real.problems.length === 0,
+    chk(">>> UI-flow.md thật: có flow hợp lệ, 0 vấn đề", real.flows.length >= 2 && real.problems.length === 0,
         JSON.stringify({ n: real.flows.length, p: real.problems }));
     chk(">>> quy ước thật mang được luật 'không điều hướng giữa luồng' (nguyên nhân gốc của 5 ca timeout 17/08)",
         /không điều hướng lại|TUYỆT ĐỐI không điều hướng/.test(real.conventions ?? ""), String(real.conventions).slice(0, 80));

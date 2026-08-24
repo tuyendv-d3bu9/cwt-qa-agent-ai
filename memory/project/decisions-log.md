@@ -30,9 +30,9 @@ Cho phép tối đa 2 mã trên 1 đơn: 01 mã giảm đơn hàng + 01 mã free
 ### GAP-001 — Mâu thuẫn phiên bản BRD Khuyến mãi
 **Trạng thái**: Đã xác nhận
 
-**Câu hỏi:** Phiên bản BRD nào (`v1.0` hay `v1.2`) là phiên bản chính thức và cập nhật nhất cần áp dụng cho toàn bộ quá trình kiểm thử?
+**Câu hỏi:** Phiên bản BRD-Promotion-v1.2.md là phiên bản chính thức thay thế hoàn toàn v1.0 hay cần tham chiếu song song cả hai?
 
-**Trả lời (người dùng xác nhận 2026-08-23):** Dùng phiên bản: BRD-Promotion-v1.2.md
+**Trả lời (người dùng xác nhận 2026-08-24):** Dùng phiên bản v1.2
 
 *Nguồn của vấn đề: `02_BA/BRD-Promotion-v1.0.md` vs `02_BA/BRD-Promotion-v1.2.md`*
 
@@ -80,6 +80,17 @@ file API-spec-voucher-checkout.md hiện tại có thể bỏ qua.
 **Trả lời (người dùng xác nhận 2026-08-24):** File này chưa thực hiện.
 
 *Nguồn của vấn đề: `06_Communication/CR-005-Mail-thread.md` vs `03_DEV/API-spec-voucher-checkout.md`*
+
+*Nguồn: `.qa-run/deliverables/gap-report.md`*
+
+### GAP-002 — Thiếu tài liệu thiết kế giao diện chi tiết cho luồng Checkout & Voucher
+**Trạng thái**: Đã xác nhận
+
+**Câu hỏi:** QA Analyst và Tester sẽ sử dụng tài liệu thiết kế nào làm chuẩn để kiểm thử UI/UX cho tính năng checkout và voucher?
+
+**Trả lời (người dùng xác nhận 2026-08-24):** 03_DEV/UI-flow.md
+
+*Nguồn của vấn đề: `04_Design/UI-note-checkout-voucher.md` vs `03_DEV/UI-flow.md`*
 
 *Nguồn: `.qa-run/deliverables/gap-report.md`*
 

@@ -157,6 +157,11 @@ export function emitSpec({ scenario, catalogue, testCase, stepsImport = "../../t
         ``,
         `const tc = dataset.cases.find(c => c.tcId === '${tcId}')!;`,
         ``,
+        `test.afterEach(async ({ page }) => {`,
+        `  await page.waitForTimeout(500);`,
+        `  await page.screenshot({ path: \`.qa-run/evidence/\${tc.tcId}-after.jpg\`, type: 'jpeg', quality: 60, scale: 'css' });`,
+        `});`,
+        ``,
         `test('${tcId}: ${(scenario.name || "").replace(/'/g, "\\'")}', async ({ page }) => {`,
         `  await openEntry(page);`,
         `  await page.screenshot({ path: \`.qa-run/evidence/\${tc.tcId}-before.jpg\`, type: 'jpeg', quality: 60, scale: 'css' });`,
@@ -184,7 +189,7 @@ export function emitSpec({ scenario, catalogue, testCase, stepsImport = "../../t
     // it comes from the test case's Expected Result. When that cannot be turned into a
     // checkable assertion, the spec FAILS LOUDLY instead of passing on two screenshots —
     // 13 of the 21 real specs were exactly that: goto + screenshot + nothing.
-    lines.push(``, `  // Expected Result: ${expected || "(test case không ghi)"}`);
+    lines.push(``, `  await page.waitForTimeout(500);`, `  // Expected Result: ${expected || "(test case không ghi)"}`);
     let assertionNote;
     if (!expected) {
         lines.push(
@@ -219,8 +224,6 @@ export function emitSpec({ scenario, catalogue, testCase, stepsImport = "../../t
     }
 
     lines.push(
-        ``,
-        `  await page.screenshot({ path: \`.qa-run/evidence/\${tc.tcId}-after.jpg\`, type: 'jpeg', quality: 60, scale: 'css' });`,
         `});`,
         ``,
     );

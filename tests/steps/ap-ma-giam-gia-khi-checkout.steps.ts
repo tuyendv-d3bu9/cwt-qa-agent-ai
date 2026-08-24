@@ -17,18 +17,34 @@ export async function openEntry(page: Page) {
   await page.goto('https://cwshopgo.github.io/');
 }
 
+/** Bước 1 của luồng: Ở trang chủ, thêm một sản phẩm bất kỳ vào giỏ hàng */
+export async function step1_oTrangChuThemMotSan(page: Page) {
+  await new AppPage(page).themVaoGioButton.click();
+}
+
+/** Bước 2 của luồng: Mở trang thanh toán / giỏ hàng */
+export async function step2_moTrangThanhToanGioHang(page: Page) {
+  await new AppPage(page).thanhToan1Button.click();
+}
+
+/** Bước 3 của luồng: Nhập mã giảm giá vào ô nhập mã rồi áp dụng */
+export async function step3_nhapMaGiamGiaVaoO(page: Page, value: string) {
+  if (value === undefined || value === null || value === '') {
+    // Thà nổ rõ ràng còn hơn fill('') rồi để test fail vì lý do sai.
+    // Đúng bẫy đã làm TC-D-002 fail: fill(tc.data.fields.voucher_code) với field không tồn tại.
+    throw new Error('step3_nhapMaGiamGiaVaoO: thiếu giá trị để nhập (bước "Nhập mã giảm giá vào ô nhập mã rồi áp dụng")');
+  }
+  await new AppPage(page).nhapMaGiam50kSale20Input.fill(value);
+}
+
+/** Bước 4 của luồng: Tiến hành thanh toán */
+export async function step4_tienHanhThanhToan(page: Page) {
+  await new AppPage(page).thanhToan180000Button.click();
+}
+
 /** Bước 5 của luồng: Kiểm tra đơn hàng vừa tạo trong mục đơn hàng */
 // Bước quan sát — KHÔNG có assertion sẵn ở đây có chủ ý: điều gì là "đúng" đến từ
 // Expected Result của test case, và pass/fail chỉ được đến từ expect() ở spec.
 export async function step5_kiemTraDonHangVuaTao(page: Page) {
   // không hành động; spec tự assert theo Expected Result của nó
 }
-
-// ── CHƯA CÓ STEP CHO CÁC BƯỚC SAU ──────────────────────────────
-// Không sinh hàm rỗng cho chúng: một hàm rỗng sẽ được spec gọi và "thành công" mà
-// không làm gì, biến một bước bị bỏ qua thành một test xanh giả.
-//   bước 1: Ở trang chủ, thêm một sản phẩm bất kỳ vào giỏ hàng  →  Page Object không có accessor cho button "Thêm vào giỏ"
-//   bước 2: Mở trang thanh toán / giỏ hàng  →  Page Object không có accessor cho button "Thanh toán"
-//   bước 3: Nhập mã giảm giá vào ô nhập mã rồi áp dụng  →  đi luồng chưa tới bước này
-//   bước 4: Tiến hành thanh toán  →  đi luồng chưa tới bước này
-// Cách sửa: explore lại để đi được tới các bước đó (xem .qa-run/deliverables/exploratory-findings.md).

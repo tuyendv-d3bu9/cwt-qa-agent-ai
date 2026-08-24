@@ -50,8 +50,27 @@ sau khi áp mã" → Expected: "Hệ thống tự gỡ mã").*
 
 ---
 
-*(Có luồng thứ 3 thì thêm một mục `## Flow: <tên>` mới ở đây, cùng định dạng. Đừng để lại
-khối mẫu rỗng — parser đọc mọi heading `## Flow:` ngoài code block là flow thật.)*
+## Flow: Nạp mã nhanh từ danh sách gợi ý
+
+**Entry:** https://cwshopgo.github.io/
+
+1. Ở trang chủ, thêm một sản phẩm bất kỳ vào giỏ hàng
+2. Mở trang thanh toán / giỏ hàng
+3. Bấm Nạp mã trên thẻ voucher gợi ý GIAM50K
+4. Tiến hành thanh toán
+5. Kiểm tra đơn hàng vừa tạo trong mục đơn hàng
+
+---
+
+## Flow: Gỡ mã giảm giá đã áp dụng
+
+**Entry:** https://cwshopgo.github.io/
+
+1. Ở trang chủ, thêm một sản phẩm bất kỳ vào giỏ hàng
+2. Mở trang thanh toán / giỏ hàng
+3. Nhập mã giảm giá vào ô nhập mã rồi áp dụng
+4. Bấm Gỡ mã
+5. Kiểm tra trạng thái mã giảm giá đã được gỡ
 
 ---
 

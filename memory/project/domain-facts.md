@@ -113,6 +113,21 @@ Hệ thống hỗ trợ các mã voucher cố định sau:
 
 *Nguồn: `project-docs/03_DEV/Spec.md`*
 
+### Danh sách và điều kiện áp dụng mã voucher cố định
+Các mã voucher cố định bao gồm:
+- `GIAM50K`: Giảm ngay 50.000 VNĐ cho đơn hàng tối thiểu từ 200.000 VNĐ
+- `SALE20`: Giảm 20% giá trị đơn hàng cho đơn từ 300.000 VNĐ (Giảm tối đa 100.000 VNĐ)
+- `HETHAN`: Mã giảm giá hết hạn sử dụng
+
+*Nguồn: `project-docs/03_DEV/Spec.md`*
+
+### Giao diện và thao tác nhập mã giảm giá
+Khu vực áp dụng mã giảm giá hỗ trợ hai cách thức thao tác:
+- Có ô điền mã với placeholder là `NHẬP MÃ` kèm nút **Áp dụng**.
+- Thao tác hover vào các dòng mã giảm sẽ hiển thị nút **Nạp mã**, sau đó nhấn vào để áp dụng mã.
+
+*Nguồn: `project-docs/03_DEV/Spec.md`*
+
 ## Source
 `project-docs/03_DEV/API-spec-voucher-checkout.md`, `project-docs/06_Communication/Bien-ban-Sprint-Planning-S24.md`. Bảng bug đã biết tách riêng sang `known-issues.md` (không lặp lại ở đây).
 
