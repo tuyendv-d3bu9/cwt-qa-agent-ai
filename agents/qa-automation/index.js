@@ -168,25 +168,40 @@ function synthesizeLocator(role, name) {
     return `page.getByText('${escaped}')`;
 }
 
-async function resolveElement(client, registry, { role, name }) {
+async function resolveElement(client, registry, { role, name, ref: freshRef = null }) {
     if (!name) return null;
     const cached = getElement(registry, role, name) ?? (
         role ? null : resolvedElements(registry).find(e => e.name === name)
     );
-    if (cached?.locator) return { ...cached, from: "registry" };
+    if (cached?.locator) {
+        if (freshRef) cached.ref = freshRef;
+        return { ...cached, ref: freshRef ?? cached.ref, from: "registry" };
+    }
 
-    let ref = null;
+    let ref = freshRef;
     let foundRole = role ?? null;
-    try {
-        const found = await mcp(client, "browser_find", { text: name });
-        const nodes = parseSnapshot(snapshotTextFrom(found)).nodes;
-        const hit = nodes.find(n => n.ref && (!role || n.role === role) && n.name) ?? nodes.find(n => n.ref);
-        if (hit) {
-            ref = hit.ref;
-            foundRole = hit.role ?? foundRole;
+    if (!ref) {
+        try {
+            const found = await mcp(client, "browser_find", { text: name });
+            const nodes = parseSnapshot(snapshotTextFrom(found)).nodes;
+            const targetNorm = name.trim().toLowerCase();
+            const hit = nodes.find(n => n.ref && (!role || n.role === role) && (
+                (n.name && n.name.trim().toLowerCase() === targetNorm) ||
+                (n.text && n.text.trim().toLowerCase() === targetNorm)
+            )) ?? nodes.find(n => n.ref && (!role || n.role === role) && (
+                (n.name && n.name.toLowerCase().includes(targetNorm)) ||
+                (n.text && n.text.toLowerCase().includes(targetNorm))
+            )) ?? nodes.find(n => n.ref && (
+                (n.name && n.name.toLowerCase().includes(targetNorm)) ||
+                (n.text && n.text.toLowerCase().includes(targetNorm))
+            ));
+            if (hit) {
+                ref = hit.ref;
+                foundRole = hit.role ?? foundRole;
+            }
+        } catch (err) {
+            console.error(`  [find] "${name}": ${err.message}`);
         }
-    } catch (err) {
-        console.error(`  [find] "${name}": ${err.message}`);
     }
     if (!ref) {
         // Even if ref not found yet, produce synthetic locator as baseline if name exists

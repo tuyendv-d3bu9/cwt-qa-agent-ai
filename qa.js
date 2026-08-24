@@ -17,11 +17,14 @@
 import "dotenv/config";
 import { createInterface } from "node:readline/promises";
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import { loadFlows, renderFlow, listFlowFiles } from "./workflow/flow-file.js";
 import { runFlow } from "./workflow/flow-runner.js";
 import { discoverNodes, downstreamOf } from "./agents/runtime/node-registry.js";
 import { approveStep, printState, loadState, currentRun, markStep } from "./agents/runtime/memory.js";
 import { supervise } from "./agents/qa-leader/index.js";
+import { db, KNOWLEDGE_DB } from "./agents/runtime/db.js";
+import * as P from "./agents/runtime/paths.js";
 
 const argv = process.argv.slice(2);
 
@@ -209,6 +212,15 @@ async function cmdRedo(name, { only = false } = {}) {
     await markStep(name, { status: "needs_rework", note: `Người dùng yêu cầu sinh lại (${new Date().toISOString().slice(0, 10)})` });
     for (const d of downstream) {
         await markStep(d, { status: "needs_rework", note: `Đầu vào đổi: "${name}" được sinh lại` });
+    }
+
+    if (name === "qa-automation" || downstream.includes("qa-automation")) {
+        try {
+            db(KNOWLEDGE_DB).prepare("UPDATE artifacts SET status = 'stale', updated_at = ? WHERE kind = 'spec'").run(new Date().toISOString());
+        } catch (_) {}
+        try {
+            if (fs.existsSync(P.UI_ELEMENTS)) fs.unlinkSync(P.UI_ELEMENTS);
+        } catch (_) {}
     }
 
     console.log(`\n>> Đã đánh "${name}" cần sinh lại.`);
