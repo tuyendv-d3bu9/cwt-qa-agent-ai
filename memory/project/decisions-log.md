@@ -49,6 +49,40 @@ Cho phép tối đa 2 mã trên 1 đơn: 01 mã giảm đơn hàng + 01 mã free
 
 *Nguồn: `.qa-run/deliverables/gap-report.md`*
 
+### GAP-001 — Mâu thuẫn phiên bản BRD Khuyến mãi (v1.0 vs v1.2)
+**Trạng thái**: Đã xác nhận
+
+**Câu hỏi:** Phiên bản nào (`v1.0` hay `v1.2`) là tài liệu chính thức cần áp dụng cho hệ thống hiện tại?
+
+**Trả lời (người dùng xác nhận 2026-08-24):** Dùng phiên bản v1.2
+
+*Nguồn của vấn đề: `02_BA/BRD-Promotion-v1.0.md` vs `02_BA/BRD-Promotion-v1.2.md`*
+
+*Nguồn: `.qa-run/deliverables/gap-report.md`*
+
+### GAP-002 — Thiếu tài liệu đặc tả chi tiết cho UI Flow và Spec kỹ thuật
+**Trạng thái**: Đã xác nhận
+
+**Câu hỏi:** Các luồng UI và Spec kỹ thuật này đã được cập nhật theo phiên bản BRD mới nhất chưa?
+
+**Trả lời (người dùng xác nhận 2026-08-24):** Spec.md đã bổ sung các mã voucher cố định.
+file API-spec-voucher-checkout.md hiện tại có thể bỏ qua.
+
+*Nguồn của vấn đề: `03_DEV/UI-flow.md` vs `03_DEV/Spec.md` vs `03_DEV/API-spec-voucher-checkout.md`*
+
+*Nguồn: `.qa-run/deliverables/gap-report.md`*
+
+### GAP-003 — Mâu thuẫn hoặc chưa đồng bộ giữa CR-005 và luồng checkout hiện tại
+**Trạng thái**: Đã xác nhận
+
+**Câu hỏi:** Các yêu cầu trong CR-005 đã được DEV cập nhật vào `API-spec-voucher-checkout.md` chưa?
+
+**Trả lời (người dùng xác nhận 2026-08-24):** File này chưa thực hiện.
+
+*Nguồn của vấn đề: `06_Communication/CR-005-Mail-thread.md` vs `03_DEV/API-spec-voucher-checkout.md`*
+
+*Nguồn: `.qa-run/deliverables/gap-report.md`*
+
 ## Source
 `project-docs/06_Communication/` (toàn bộ), đối chiếu với `.qa-run/deliverables/gap-report.md` (nếu có câu trả lời).
 
