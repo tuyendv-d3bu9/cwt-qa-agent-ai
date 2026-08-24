@@ -299,7 +299,7 @@ export async function approveStep(agent, by) {
       `  Xem các bước đang có: node agents/approve.js`
     );
   }
-  return markStep(agent, { human_approved: true, approved_by: by });
+  return markStep(agent, { status: "done", human_approved: true, approved_by: by });
 }
 
 /** Human-Final: the next node must not run until a person has approved this one. */
