@@ -190,7 +190,8 @@ function candidateNodes(nodes, step) {
 /** Map the AI's chosen action onto an MCP call. Only these three; anything else is a miss. */
 async function performAction({ mcp, decision, element, step }) {
     const action = (decision.action ?? "click").toLowerCase();
-    const target = { ref: element.ref, element: decision.name };
+    const targetRef = element?.ref || element?.target || "";
+    const target = { target: targetRef, ref: targetRef, element: decision.name };
 
     try {
         if (action === "type" || action === "fill") {
