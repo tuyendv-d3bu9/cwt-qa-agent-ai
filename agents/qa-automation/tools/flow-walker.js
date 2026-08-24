@@ -103,8 +103,16 @@ export async function walkFlow({ flow, mcp, snapshot, resolve, ask, log = () => 
             break;
         }
 
-        const element = await resolve({ role: decision.role, name: decision.name });
-        if (!element?.ref && !element?.locator) {
+        const matchedCandidate = candidates.find(c =>
+            (!decision.role || c.role === decision.role) &&
+            ((c.name && c.name.toLowerCase() === decision.name.toLowerCase()) ||
+             (c.name && c.name.toLowerCase().includes(decision.name.toLowerCase())) ||
+             (c.text && c.text.toLowerCase().includes(decision.name.toLowerCase())))
+        );
+        const freshRef = matchedCandidate?.ref ?? null;
+
+        const element = await resolve({ role: decision.role, name: decision.name, ref: freshRef });
+        if (!freshRef && !element?.ref && !element?.locator) {
             findings.push({
                 step: step.n, text: step.text, kind: "unresolvable",
                 detail: `AI chọn ${decision.role} "${decision.name}" nhưng không lấy được locator/ref cho nó.`,
@@ -114,7 +122,7 @@ export async function walkFlow({ flow, mcp, snapshot, resolve, ask, log = () => 
             break;
         }
 
-        const performed = await performAction({ mcp, decision, element, step });
+        const performed = await performAction({ mcp, decision, element: { ...element, ref: freshRef ?? element?.ref }, step });
         if (performed.error) {
             findings.push({
                 step: step.n, text: step.text, kind: "action_failed",
@@ -182,7 +190,8 @@ function candidateNodes(nodes, step) {
 /** Map the AI's chosen action onto an MCP call. Only these three; anything else is a miss. */
 async function performAction({ mcp, decision, element, step }) {
     const action = (decision.action ?? "click").toLowerCase();
-    const target = { ref: element.ref, element: decision.name };
+    const targetRef = element?.ref || element?.target || "";
+    const target = { target: targetRef, ref: targetRef, element: decision.name };
 
     try {
         if (action === "type" || action === "fill") {
@@ -192,14 +201,26 @@ async function performAction({ mcp, decision, element, step }) {
             if (value === null || value === undefined || value === "") {
                 return { tool: "browser_type", error: `bước yêu cầu nhập nhưng không có giá trị để nhập` };
             }
-            await mcp("browser_type", { ...target, text: String(value) });
+            const res = await mcp("browser_type", { ...target, text: String(value) });
+            const resText = typeof res === "string" ? res : JSON.stringify(res ?? "");
+            if (res?.isError || resText.includes("### Error")) {
+                return { tool: "browser_type", error: resText };
+            }
             return { tool: "browser_type" };
         }
         if (action === "select") {
-            await mcp("browser_select_option", { ...target, values: [String(decision.value ?? "")] });
+            const res = await mcp("browser_select_option", { ...target, values: [String(decision.value ?? "")] });
+            const resText = typeof res === "string" ? res : JSON.stringify(res ?? "");
+            if (res?.isError || resText.includes("### Error")) {
+                return { tool: "browser_select_option", error: resText };
+            }
             return { tool: "browser_select_option" };
         }
-        await mcp("browser_click", target);
+        const res = await mcp("browser_click", target);
+        const resText = typeof res === "string" ? res : JSON.stringify(res ?? "");
+        if (res?.isError || resText.includes("### Error")) {
+            return { tool: "browser_click", error: resText };
+        }
         return { tool: "browser_click" };
     } catch (err) {
         return { tool: `browser_${action}`, error: String(err?.message ?? err) };

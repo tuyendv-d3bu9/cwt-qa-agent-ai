@@ -9,7 +9,7 @@ import { runAgentLoop } from "../runtime/agent-loop.js";
 import { contextFor } from "../runtime/knowledge.js";
 import { registerArtifact } from "../qa-leader/tools/impact-analysis.js";
 import { artifactId } from "../runtime/db.js";
-import { verifyDeliverable } from "./tools/coverage-check.js";
+import { verifyDeliverable, parseTestCaseRows } from "./tools/coverage-check.js";
 import * as P from "../runtime/paths.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
@@ -84,15 +84,33 @@ async function agentStep({ skillText, userText, selfCheck, label, maxRevisions =
     return { text: out.text, ok: out.ok, issues: out.issues };
 }
 
-function assembleDeliverable({ testCases, check }) {
+/**
+ * Ghép deliverable cuối. Hai điều bản trước làm sai, đo được trên lần chạy thật 2026-08-24:
+ *
+ * 1. LỒNG HAI TÀI LIỆU. Skill 03 trả về một tài liệu đầy đủ (có `# Deliverable — QA Test
+ *    Designer` và các mục `## 1..4` của riêng nó). Bọc thêm một `# Deliverable` + `## 1. Test
+ *    Cases` bên ngoài cho ra file có HAI H1, và số mục đụng nhau: `## 1. Test Cases` rồi ngay
+ *    dưới là `## 1. Coverage Strategy Map`.
+ * 2. HAI MỤC "Self Count Check" NÓI NGƯỢC NHAU. Mục của LLM tự khai "All 21 test ideas are
+ *    mapped… All 8 mandatory fields fully populated"; mục của tool ngay dưới nói "CHƯA ĐẠT".
+ *    Người đọc không có cách nào biết mục nào là thước đo. Nên mục của tool được đặt tên
+ *    tách biệt hẳn, luôn ở cuối, và nói rõ nó ĐO — còn mục kia là LLM TỰ KHAI.
+ */
+export function assembleDeliverable({ testCases, check }) {
     const checkSection = check.ok
         ? `Đạt đủ coverage (idea Analyst: ${check.ideaCount}, test case: ${check.testCaseCount}, blocked: ${check.blockedCount}).`
         : `**CHƯA ĐẠT** — ${check.issues.join(" ")}`;
-    return (
-        `# Deliverable — QA Test Designer\n\n` +
-        `## 1. Test Cases\n${testCases}\n\n` +
-        `## 2. Self Count Check (deterministic, tool coverage-check.js)\n${checkSection}\n`
-    );
+
+    const body = String(testCases ?? "").trim();
+    // LLM đã tự viết H1 thì không bọc thêm H1 nữa — dùng luôn thân nó.
+    const hasOwnTitle = /^#\s+\S/.test(body);
+    const head = hasOwnTitle ? `${body}\n` : `# Deliverable — QA Test Designer\n\n## 1. Test Cases\n${body}\n`;
+    // Nếu LLM cũng tự viết mục self-count, nói rõ mục nào mới là số đo.
+    const llmSelfClaim = /^##.*Self Count Check/im.test(body)
+        ? `> Mục "Self Count Check" ở trên do LLM TỰ KHAI, chưa qua đo. Mục dưới đây là số đo thật.\n\n`
+        : "";
+
+    return `${head}\n---\n\n${llmSelfClaim}## Kiểm đếm bằng tool (coverage-check.js — deterministic)\n${checkSection}\n`;
 }
 
 // Tier-3 files this node consumes — used to record provenance of the test cases it
@@ -107,14 +125,16 @@ const KNOWLEDGE_FILES_READ = [
     P.UI_FLOWS,
 ];
 
-/** TC_ID of every row in the generated 8-field table. Deterministic, no LLM. */
+/**
+ * TC_ID của mọi dòng trong bảng 8 trường. Deterministic, không LLM.
+ *
+ * Dùng LẠI parseTestCaseRows chứ không tự parse. Bản trước tự lọc mọi dòng `|` trong cả tài
+ * liệu, nên nó đăng ký vào đồ thị truy vết 21 "test case" mang tên các dòng của bảng
+ * Coverage Strategy Map ("Nhập mã voucher không tồn tại trong hệ thống", …) — rác bền trong
+ * runs.db, và impact analysis sau đó trả lời sai câu "test case nào đã cũ".
+ */
 function extractTestCaseIds(testCaseMarkdown) {
-    return [...new Set(
-        testCaseMarkdown.split("\n")
-            .filter(l => l.trim().startsWith("|") && !l.includes("---"))
-            .map(l => l.split("|").map(c => c.trim())[1])
-            .filter(id => id && !/^TC_ID$/i.test(id))
-    )];
+    return [...new Set(parseTestCaseRows(testCaseMarkdown).map(r => r[0]).filter(Boolean))];
 }
 
 // Handover contract — see memory/README.md rule 3.

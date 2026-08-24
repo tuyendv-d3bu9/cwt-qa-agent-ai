@@ -34,6 +34,28 @@ const REF_RE = /\[ref=([^\]]+)\]/;
 // bare flag — including `disabled`, which decides whether a step can even be performed.
 const ATTR_RE = /\[([a-zA-Z_][\w-]*)(?:=([^\]]*))?\]/g;
 const HEAD_RE = /^([a-zA-Z][\w-]*)(?:\s+"((?:[^"\\]|\\.)*)")?/;
+// Playwright emits some properties as an indented CHILD line prefixed with `/`, not as a
+// `[key=value]` bracket on the node's own line:
+//
+//   - link "Dashboard" [ref=f2e193] [cursor=pointer]:
+//     - /url: "#"
+//
+// `HEAD_RE` starts at `[a-zA-Z]`, so `/url` never matched and every one of these landed in
+// `unparsed` — the "7 dòng không parse được" warning was exactly the 7 footer links. They
+// are properties of the parent node, so that is where they belong.
+const PROP_RE = /^\/([\w-]+):\s*(.*)$/;
+
+/**
+ * Node nào "sở hữu" một dòng thuộc tính ở độ sâu `depth`: node gần nhất phía trên nông hơn.
+ * Đi từ cuối lên chứ không lấy luôn `nodes.at(-1)` — giữa chúng có thể là một node `text`
+ * cùng cấp, và khi đó thuộc tính sẽ bị gán sai chủ.
+ */
+function findOwner(nodes, depth) {
+    for (let i = nodes.length - 1; i >= 0; i--) {
+        if (nodes[i].depth < depth) return nodes[i];
+    }
+    return null;
+}
 
 /**
  * @returns {{nodes: object[], unparsed: {line: number, text: string}[]}}
@@ -56,7 +78,23 @@ export function parseSnapshot(snapshotText) {
         }
 
         const depth = Math.floor(m[1].length / 2);
-        let body = m[2].replace(/:\s*$/, "");
+        const rawBody = m[2];
+        let body = rawBody.replace(/:\s*$/, "");
+
+        // `- /url: "..."` là THUỘC TÍNH của node cha, không phải một node riêng.
+        // Kiểm trên `rawBody` (chưa cắt dấu `:` cuối) để `- /url:` với giá trị rỗng vẫn khớp.
+        const propMatch = PROP_RE.exec(rawBody);
+        if (propMatch) {
+            const owner = findOwner(nodes, depth);
+            if (owner) {
+                // Giữ tên có `/` như Playwright phát ra, để không lẫn với thuộc tính dạng
+                // `[key=value]` của chính node đó.
+                owner.attrs[`/${propMatch[1]}`] = propMatch[2].trim().replace(/^"(.*)"$/, "$1");
+            } else {
+                unparsed.push({ line: idx + 1, text: rawLine.trim() });
+            }
+            return;
+        }
 
         // `- text: nội dung` là node văn bản thuần
         const textMatch = /^text:\s*(.*)$/.exec(body);

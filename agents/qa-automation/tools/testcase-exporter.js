@@ -12,6 +12,7 @@
 // for the generator to turn into assertions, not as something the runtime interprets.
 
 import { runTool } from "../../runtime/tools.js";
+import { findTable } from "../../runtime/md-table.js";
 import * as P from "../../runtime/paths.js";
 
 export const DATA_PATH = P.TEST_CASE_DATA;
@@ -19,28 +20,28 @@ export const DATA_PATH = P.TEST_CASE_DATA;
 const FIELDS = ["TC_ID", "Title", "Precondition", "Steps", "Test Data", "Expected Result", "Priority", "Tags"];
 
 /**
- * Parse the markdown table produced by qa-test-designer.
- * Rows whose first cell does not look like an ID are skipped (header/separator rows).
+ * Đọc bảng test case do qa-test-designer sinh ra.
+ *
+ * CHỈ đọc bảng có tiêu đề `| TC_ID | …`. Bản trước lấy mọi dòng `|` trong cả tài liệu, nên
+ * 21 dòng của bảng "Coverage Strategy Map" (5 cột) rơi vào `malformed` và index.js in ra 21
+ * dòng lỗi giả — che đúng những dòng lỗi thật cần thấy. Xem agents/runtime/md-table.js.
  */
 export function parseTestCaseTable(markdown) {
     const rows = [];
     const malformed = [];
 
-    const lines = String(markdown ?? "").split("\n");
-    lines.forEach((line, idx) => {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("|") || trimmed.includes("---")) return;
-
-        const cells = trimmed.split("|").map(c => c.trim());
-        // split on a "|a|b|" string yields empty first/last entries
-        const values = cells.slice(1, -1);
+    const table = findTable(markdown, { firstHeaderCell: /^TC[_\s-]?ID$/i });
+    table.rows.forEach((values, idx) => {
         const id = values[0];
-        if (!id || /^TC_ID$/i.test(id)) return;
+        if (!id) return;
 
         if (values.length !== FIELDS.length) {
             // Never silently accept a row with the wrong shape — a shifted column would
             // put Expected Result where Priority belongs.
-            malformed.push({ line: idx + 1, cellCount: values.length, expected: FIELDS.length, id });
+            // `row` = thứ tự dòng TRONG BẢNG, không phải số dòng trong file: findTable() trả
+            // về các dòng dữ liệu đã lọc. Gọi nó là `line` như trước là nói sai với người đọc
+            // log, họ sẽ mở file rồi nhảy tới một dòng không liên quan.
+            malformed.push({ row: idx + 1, cellCount: values.length, expected: FIELDS.length, id });
             return;
         }
 

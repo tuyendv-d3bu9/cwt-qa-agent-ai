@@ -110,7 +110,64 @@ const warn = console.warn; console.warn = () => { };
         r.elements["button|a"].locator === "getByRole('button', { name: 'A' })", JSON.stringify(r.elements["button|a"].locator));
 }
 
-// ─────────── 6. Danh sách tool bắt buộc của MCP ───────────
+// ─────────── 6. LẦN CHẠY THẬT 2026-08-24: locator ĐÚNG nhưng bọc trong markdown ───────────
+//
+// Lần này `browser_generate_locator` đã tồn tại và trả về locator ĐÚNG — chỉ là bọc markdown:
+//     "### Result\ngetByRole('button', { name: 'Cửa hàng' })"
+// Bộ lọc phủ định của mục 1 (có `\n`, bắt đầu bằng `#`) loại sạch 100% locator hợp lệ:
+//     [registry] BỎ giá trị không phải locator cho "button|Cửa hàng": "### Result\n..."
+// → registry 0 phần tử → app.page.ts 0 accessor → catalogue.available 0 step → Gherkin
+//   scenario rỗng và bị self-check chặn ("Trường \"steps\" rỗng").
+// Hai mục 1 và 6 kéo ngược nhau, và đó chính là bài test: PHẢI bỏ vỏ mà vẫn chặn chuỗi lỗi.
+{
+    const wrapped = [
+        ['### Result\ngetByRole(\'button\', { name: \'Cửa hàng\' })', "getByRole('button', { name: 'Cửa hàng' })", "### Result + getByRole"],
+        ["### Result\nlocator('#btn-add-prod-001')", "locator('#btn-add-prod-001')", "### Result + locator(#id)"],
+        ["## Locator\n\npage.getByLabel('Mã giảm giá')", "page.getByLabel('Mã giảm giá')", "heading khác + tiền tố page."],
+        ["```js\ngetByTestId('apply-voucher')\n```", "getByTestId('apply-voucher')", "code fence"],
+        ["### Result\ngetByRole('button', { name: 'X' });", "getByRole('button', { name: 'X' })", "dấu ; cuối bị cắt"],
+    ];
+    for (const [raw, want, why] of wrapped) {
+        chk(`>>> bóc vỏ markdown: ${why}`, R.cleanLocator(raw) === want, JSON.stringify(R.cleanLocator(raw)));
+    }
+    chk(">>> locator bọc markdown ĐƯỢC LƯU (đây là lỗi làm registry rỗng sạch)",
+        R.isUsableLocator("### Result\ngetByRole('button', { name: 'Cửa hàng' })") === true);
+
+    const r = reg();
+    R.putElement(r, { role: "button", name: "Cửa hàng", locator: "### Result\ngetByRole('button', { name: 'Cửa hàng' })" });
+    chk(">>> registry lưu dạng ĐÃ BÓC VỎ, không lưu nguyên văn MCP (chuỗi này ghép thẳng vào .ts)",
+        r.elements["button|cửa hàng"].locator === "getByRole('button', { name: 'Cửa hàng' })",
+        JSON.stringify(r.elements["button|cửa hàng"].locator));
+
+    // Vỏ markdown bị bóc, nhưng RUỘT là câu báo lỗi thì vẫn phải ra null.
+    chk("### Error + 'not found' vẫn bị từ chối sau khi bóc vỏ",
+        R.cleanLocator('### Error\nTool "browser_generate_locator" not found') === null);
+    // Và "not found"/"error" NẰM TRONG một locator thật thì không được coi là báo lỗi:
+    // getByText('... not found') là locator hợp lệ cho thông báo lỗi trên UI — thứ QA hay test nhất.
+    chk(">>> 'not found' bên trong locator THẬT không bị hiểu là báo lỗi",
+        R.cleanLocator("getByText('Sản phẩm not found')") === "getByText('Sản phẩm not found')",
+        JSON.stringify(R.cleanLocator("getByText('Sản phẩm not found')")));
+    chk(">>> locator cho thông báo lỗi trên UI vẫn dùng được",
+        R.isUsableLocator("getByRole('alert', { name: 'Error' })") === true);
+
+    // Một registry cũ trên đĩa còn giữ nguyên văn markdown thì chỗ ĐỌC phải bóc, không phải
+    // bắt mọi chỗ dùng tự nhớ bóc.
+    const old = reg();
+    old.elements["button|cửa hàng"] = {
+        role: "button", name: "Cửa hàng",
+        locator: "### Result\ngetByRole('button', { name: 'Cửa hàng' })",
+        ref: "e7", source: "browser_find", firstSeen: "2026-08-24T02:00:00.000Z",
+    };
+    chk("resolvedElements bóc vỏ cho file cũ trên đĩa",
+        R.resolvedElements(old)[0]?.locator === "getByRole('button', { name: 'Cửa hàng' })",
+        JSON.stringify(R.resolvedElements(old)[0]?.locator));
+    chk("getElement cũng bóc vỏ (không phát rác cho chỗ gọi)",
+        R.getElement(old, "button", "Cửa hàng").locator === "getByRole('button', { name: 'Cửa hàng' })");
+    chk("registry đã có locator thật (dù bọc vỏ) thì KHÔNG bị coi là còn thiếu",
+        R.missingElements(old, [{ role: "button", name: "Cửa hàng" }]).length === 0);
+}
+
+// ─────────── 7. Danh sách tool bắt buộc của MCP ───────────
 {
     chk(">>> browser_generate_locator nằm trong REQUIRED_TOOLS (thiếu nó là mất cả P4)",
         M.REQUIRED_TOOLS.includes("browser_generate_locator"), JSON.stringify(M.REQUIRED_TOOLS));

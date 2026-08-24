@@ -4,6 +4,7 @@
 // This tool counts and cross-checks the ACTUAL output, deterministically.
 
 import { countTestIdeas } from "../../qa-analyst/tools/count-check.js";
+import { findTable } from "../../runtime/md-table.js";
 
 // `TC-<F>-<nnn>` per memory/semantic/testing-conventions.md — the feature code is NOT
 // fixed. This was `/^TC-D-\d{3}$/`, which rejected every test case of any project whose
@@ -35,23 +36,24 @@ export function countAnalystIdeas(deliverableAnalystMarkdown) {
     return countTestIdeas(deliverableAnalystMarkdown).totalIdeas;
 }
 
-/** A GFM separator cell: dashes with optional alignment colons — `---`, `:-:`, `-`, `:--`. */
-const isSeparatorCell = (cell) => /^:?-+:?$/.test(cell.trim());
+/** Ô đầu dòng tiêu đề của bảng test case. Chỉ bảng này được đọc, không bảng nào khác. */
+export const TC_TABLE_HEADER = /^TC[_\s-]?ID$/i;
 
 /**
- * Parse the 8-field test case table rows (exclude header + separator).
+ * Đọc các dòng dữ liệu của RIÊNG bảng test case 8 trường.
  *
- * Separator detection is per-cell, not `!line.includes("---")`. GitHub-flavored Markdown
- * accepts a one-dash separator (`|-|-|-|`), which the old substring test did not recognise
- * — so the separator was returned as a DATA ROW, and then failed the TC_ID format check
- * with the delightful message `TC_ID sai format: -`.
+ * PHẠM VI BẢNG LÀ BẮT BUỘC. Bản trước lấy mọi dòng bắt đầu bằng `|` trong cả tài liệu, nên
+ * nó đọc luôn bảng "Coverage Strategy Map" (5 cột) và các bảng Boundary Set do skill 01/02
+ * sinh ra. Lần chạy thật 2026-08-24: 21 dòng của Coverage Strategy Map bị báo là 21 test
+ * case sai format, kèm cả ô tiêu đề "Test Idea (từ Analyst)" — trong khi bảng test case
+ * thật có đủ 21 dòng TC-D-001..021 hợp lệ. Xem agents/runtime/md-table.js.
+ *
+ * Việc nhận dòng ngăn cách vẫn theo TỪNG Ô, không phải `!line.includes("---")`: GFM cho
+ * phép `|-|-|-|`, mà phép thử chuỗi con cũ không nhận ra — dòng ngăn cách khi đó trở thành
+ * DÒNG DỮ LIỆU rồi trượt kiểm TC_ID với thông báo `TC_ID sai format: -`.
  */
 export function parseTestCaseRows(testCaseMarkdown) {
-    return testCaseMarkdown
-        .split("\n")
-        .filter(l => l.trim().startsWith("|") && !/^\|\s*TC_ID/i.test(l.trim()))
-        .map(l => l.split("|").map(c => c.trim()).filter((_, i, arr) => i > 0 && i < arr.length - 1))
-        .filter(cells => cells.length > 0 && !cells.every(isSeparatorCell));
+    return findTable(testCaseMarkdown, { firstHeaderCell: TC_TABLE_HEADER }).rows;
 }
 
 /** Count how many OPEN QUESTION-blocked ideas were explicitly carried over (not silently dropped) */
@@ -66,11 +68,23 @@ export function countBlockedIdeas(testCaseMarkdown) {
  */
 export function verifyDeliverable({ deliverableAnalystMarkdown, testCaseMarkdown }) {
     const ideaCount = countAnalystIdeas(deliverableAnalystMarkdown);
-    const rows = parseTestCaseRows(testCaseMarkdown);
+    const table = findTable(testCaseMarkdown, { firstHeaderCell: TC_TABLE_HEADER });
+    const rows = table.rows;
     const blockedCount = countBlockedIdeas(testCaseMarkdown);
     const testCaseCount = rows.length;
 
     const issues = [];
+
+    // Nói thẳng "không thấy bảng" thay vì để nó biến thành "bỏ sót idea". Hai nguyên nhân
+    // khác nhau cần hai câu sửa khác nhau: một là viết lại tiêu đề bảng, một là viết thêm
+    // test case. Gộp chúng vào một thông báo là đẩy người viết đi sai đường.
+    if (!table.found) {
+        issues.push(
+            `Không tìm thấy bảng test case — thiếu dòng tiêu đề \`| TC_ID | Title | ... |\`. ` +
+            `Bảng test case phải có ô đầu tiêu đề đúng là TC_ID.`
+        );
+        return { ok: false, ideaCount, testCaseCount: 0, blockedCount, issues };
+    }
 
     if (testCaseCount + blockedCount < ideaCount) {
         issues.push(

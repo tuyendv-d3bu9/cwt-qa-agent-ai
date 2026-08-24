@@ -13,6 +13,8 @@
 // GENERIC: nothing about any application. Names come from the accessible names the browser
 // reported, so a different project yields a different Page Object from the same code.
 
+import { cleanLocator } from "./ui-element-registry.js";
+
 /** Reserved words + anything that cannot start a JS identifier. */
 const RESERVED = new Set([
     "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do",
@@ -44,9 +46,24 @@ export function toIdentifier(role, name) {
     return id;
 }
 
-/** `page.getByRole('button', { name: 'X' })` -> `this.page.getByRole(...)` for class use. */
+/**
+ * Locator string -> biểu thức dùng được BÊN TRONG class Page Object.
+ *
+ * `browser_generate_locator` trả về locator KHÔNG có tiền tố nào: `getByRole('button', {...})`
+ * hoặc `locator('#btn-add-prod-001')`. Bản cũ chỉ đổi `page.` thành `this.page.`, nên dạng
+ * không tiền tố đi thẳng vào file .ts và sinh ra
+ *     get cuahangButton(): Locator { return getByRole('button', ...); }
+ * — `getByRole` là biến không tồn tại: file không compile, và lỗi chỉ nổ ở `tsc`/lúc chạy
+ * spec, cách chỗ sai vài bước. Nên chuẩn hoá TẤT CẢ các dạng về `this.page.` ở đây.
+ */
 function asMember(locator) {
-    return String(locator ?? "").replace(/^page\./, "this.page.");
+    const s = String(locator ?? "").trim().replace(/;+$/, "");
+    if (!s) return s;
+    if (s.startsWith("this.page.")) return s;
+    if (/^page\s*\./.test(s)) return s.replace(/^page\s*\./, "this.page.");
+    // Không tiền tố: `getByRole(...)`, `locator(...)`, `getByTestId(...)`, `frameLocator(...)`
+    if (/^(getBy[A-Za-z]+|locator|frameLocator)\s*\(/.test(s)) return `this.page.${s}`;
+    return s;
 }
 
 /**
@@ -57,7 +74,10 @@ function asMember(locator) {
  * @returns {{ content: string, exported: Array<{identifier: string, role: string, name: string}>, skipped: Array }}
  */
 export function emitPageObject({ registry, className = "AppPage", baseUrl = null }) {
-    const all = Object.values(registry?.elements ?? {});
+    // `cleanLocator` chứ không phải `e.locator` truthy — cùng luật với registry, để một
+    // ui-elements.json cũ (còn nguyên văn markdown của MCP) không lọt vào file .ts.
+    const all = Object.values(registry?.elements ?? {})
+        .map(e => ({ ...e, locator: cleanLocator(e.locator) }));
     const usable = all.filter(e => e.locator && e.name);
     const skipped = all
         .filter(e => !e.locator || !e.name)

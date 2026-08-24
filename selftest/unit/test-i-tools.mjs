@@ -54,6 +54,41 @@ chk("fingerprint ĐỔI khi cấu trúc/nhãn đổi", SP.structureFingerprint(n
 
 chk("bóc được text từ envelope MCP", SP.snapshotTextFrom({ content: [{ type: "text", text: "abc" }] }) === "abc");
 
+// ─────────── LẦN CHẠY THẬT 2026-08-24: thuộc tính dạng `- /url:` ───────────
+//
+// Playwright phát một số thuộc tính thành dòng CON có tiền tố `/`, không phải `[key=value]`
+// trên chính dòng của node. `HEAD_RE` bắt đầu ở `[a-zA-Z]` nên `/url` không khớp và mọi dòng
+// như thế rơi vào `unparsed` — đúng là "7 dòng không parse được" trong log (7 link ở footer).
+// Cảnh báo giả kiểu này nguy hiểm vì nó dạy người đọc bỏ qua cảnh báo parse.
+{
+    const withProps = `- navigation [ref=f1]:
+  - link "Dashboard" [ref=f2e193] [cursor=pointer]:
+    - /url: "#"
+  - link "Trang chủ" [ref=f3]:
+    - /url: "https://app.test/home"
+  - textbox "Mã giảm giá" [ref=f4]:
+    - /placeholder: "Nhập mã"
+  - link "Trống" [ref=f5]:
+    - /url:`;
+    const r = SP.parseSnapshot(withProps);
+    chk(">>> dòng `- /url:` KHÔNG còn bị báo là không parse được", r.unparsed.length === 0, JSON.stringify(r.unparsed));
+    chk("thuộc tính `/` gán vào node CHA, không sinh node rác",
+        r.nodes.length === 5 && r.nodes.filter(n => n.role === "link").length === 3, JSON.stringify(r.nodes.map(n => n.role)));
+    chk("giá trị `/url` được gỡ ngoặc kép và gán đúng chủ",
+        r.nodes.find(n => n.name === "Trang chủ")?.attrs["/url"] === "https://app.test/home",
+        JSON.stringify(r.nodes.find(n => n.name === "Trang chủ")?.attrs));
+    chk("thuộc tính `/` không lẫn với thuộc tính [key=value] của cùng node",
+        r.nodes.find(n => n.name === "Dashboard")?.attrs.cursor === "pointer" &&
+        r.nodes.find(n => n.name === "Dashboard")?.attrs["/url"] === "#",
+        JSON.stringify(r.nodes.find(n => n.name === "Dashboard")?.attrs));
+    chk("`/placeholder` cũng vào đúng textbox",
+        r.nodes.find(n => n.role === "textbox")?.attrs["/placeholder"] === "Nhập mã");
+    chk("`- /url:` giá trị rỗng vẫn khớp (không rơi vào unparsed)",
+        r.nodes.find(n => n.name === "Trống")?.attrs["/url"] === "");
+    chk("thuộc tính không phá cấu trúc: link vẫn là node tương tác được",
+        SP.interactiveNodes(r.nodes).length === 4, String(SP.interactiveNodes(r.nodes).length));
+}
+
 // ─────────── registry ───────────
 let reg = { url: null, elements: {}, fingerprint: null, updatedAt: null };
 REG.putElement(reg, { role: "textbox", name: "Mã giảm giá", locator: "getByLabel('Mã giảm giá')", ref: "e14" });

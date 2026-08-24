@@ -82,6 +82,37 @@ Các vấn đề chưa rõ cần giải quyết từ tài liệu UI-flow.md:
 
 *Nguồn: `project-docs/03_DEV/UI-flow.md`*
 
+### API Spec — Voucher / Mã giảm giá (Checkout)
+API spec cho tính năng voucher checkout (Sprint 23, ShopGo Nhóm tính năng D):
+- **Endpoint:** `POST /api/v1/checkout/voucher/apply`, `DELETE /api/v1/checkout/voucher`. Chưa có endpoint riêng re-check voucher.
+- **Định dạng mã:** `voucher_code` so khớp case-sensitive, **chỉ nhận chữ hoa**. Client tự uppercase trước khi gửi (fix BUG-1163).
+- **Điều kiện tối thiểu (`min_order_value`):** So sánh với tổng tiền hàng (subtotal sản phẩm), chưa cộng phí ship.
+- **Trần giảm tối đa:** `max_discount` áp dụng chung cho cả `PERCENT` và `FIXED`.
+- **Hạn sử dụng:** `expire_at` lưu UTC, điều kiện hết hạn là `now_utc > expire_at`.
+- **Loại mã FREESHIP:** Trừ trực tiếp `discount_amount` vào `order_total_before` dùng chung logic.
+- **Làm tròn:** Làm tròn xuống (floor) tới hàng nghìn trước khi trừ vào tổng đơn.
+- **Giới hạn khách hàng:** Chưa có trong scope Sprint 23 (không giới hạn số lần).
+- **Known limitations:** Chưa có endpoint re-validate, `VOUCHER_USAGE_LIMIT_REACHED` chưa implement đầy đủ, message lỗi `VOUCHER_NOT_FOUND` chưa cập nhật wording UI.
+
+*Nguồn: `project-docs/03_DEV/API-spec-voucher-checkout.md`*
+
+### UI Flow — Luồng nghiệp vụ và quy ước checkout voucher
+UI flow và quy ước nghiệp vụ cho automation và kiểm thử:
+- **Flow 1:** Áp mã giảm giá khi checkout (Thêm sản phẩm -> Mở giỏ/thanh toán -> Nhập mã áp dụng -> Thanh toán -> Kiểm tra đơn hàng).
+- **Flow 2:** Sửa giỏ hàng sau khi đã áp mã (Thêm đủ min order -> Nhập mã -> Kiểm tra kích hoạt -> Bớt hàng xuống dưới min order -> Kiểm tra mã không còn kích hoạt).
+- **Đưa app về trạng thái sạch:** Mở lại Entry URL là đủ (không cần bấm reset hay clear localStorage). **Giữa các bước trong luồng: TUYỆT ĐỐI không điều hướng lại** vì sẽ làm mất giỏ hàng.
+- **Nhận diện mã đang áp:** Quan sát trạng thái "Đang kích hoạt giảm giá" và nút "Gỡ mã" ngay dưới ô nhập mã.
+
+*Nguồn: `project-docs/03_DEV/UI-flow.md`*
+
+### Danh sách mã voucher cố định
+Hệ thống hỗ trợ các mã voucher cố định sau:
+- `GIAM50K`: Giảm ngay 50.000 VNĐ cho đơn hàng tối thiểu từ 200.000 VNĐ.
+- `SALE20`: Giảm 20% giá trị đơn hàng cho đơn từ 300.000 VNĐ (Mức giảm tối đa là 100.000 VNĐ).
+- `HETHAN`: Mã giảm giá đã hết hạn sử dụng.
+
+*Nguồn: `project-docs/03_DEV/Spec.md`*
+
 ## Source
 `project-docs/03_DEV/API-spec-voucher-checkout.md`, `project-docs/06_Communication/Bien-ban-Sprint-Planning-S24.md`. Bảng bug đã biết tách riêng sang `known-issues.md` (không lặp lại ở đây).
 
