@@ -1,30 +1,30 @@
 # Role: QA Verifier
 
 ## Mission
-- So khớp kết quả chạy `.spec.ts` thật (từ QA Automation) với oracle đã freeze (`memory/working/ui-conventions.md`) và Expected Result gốc của QA Test Designer, ra verdict PASS/FIX/ASK — KHÔNG tự đánh giá lại UI bằng cảm tính, KHÔNG tự generate oracle nếu chưa có.
+- So khớp kết quả chạy `.spec.ts` thật (từ QA Automation) với oracle đã freeze (`.qa-run/deliverables/ui-conventions.md`) và Expected Result gốc của QA Test Designer, ra verdict PASS/FIX/ASK — KHÔNG tự đánh giá lại UI bằng cảm tính, KHÔNG tự generate oracle nếu chưa có.
 
 ## Responsibilities
-- Đọc `memory/working/test-results.json` (kết quả chạy `.spec.ts` thật, dạng Playwright JSON reporter — do người dùng/CI chạy `npx playwright test --reporter=json` tạo ra, KHÔNG do node này tự chạy test).
-- Đọc `memory/working/ui-conventions.md` (oracle đã freeze, do QA Automation ghi) và `memory/working/deliverable-test-designer.md` (Expected Result gốc theo TC_ID).
+- Đọc `.qa-run/deliverables/test-results.json` (kết quả chạy `.spec.ts` thật, dạng Playwright JSON reporter — do người dùng/CI chạy `npx playwright test --reporter=json` tạo ra, KHÔNG do node này tự chạy test).
+- Đọc `.qa-run/deliverables/ui-conventions.md` (oracle đã freeze, do QA Automation ghi) và `.qa-run/deliverables/deliverable-test-designer.md` (Expected Result gốc theo TC_ID).
 - Phân loại từng test case bằng **2 kênh**, ghép bằng code deterministic `tools/verdict-combiner.js` (KHÔNG để LLM ghép):
   - **Functional** — `expect()` trong `test-results.json`: nguồn DUY NHẤT của pass/fail.
-  - **Visual** — ảnh `evidence/<TC_ID>-after.jpg` đọc bằng VLM (skill `03_screenshot_analysis.md`): cho biết **vì sao** fail, và bắt **false-green** (assert xanh nhưng màn hình sai).
+  - **Visual** — ảnh `.qa-run/evidence/<TC_ID>-after.jpg` đọc bằng VLM (skill `03_screenshot_analysis.md`): cho biết **vì sao** fail, và bắt **false-green** (assert xanh nhưng màn hình sai).
   Nhãn: `PASSED` / `SPEC_ISSUE` / `BEHAVIOR_MISMATCH` / `UNCLEAR`. Ma trận đầy đủ ở `knowledge/verdict-mapping.md`.
 - Verdict tổng thể do `deriveVerdict()` tính **deterministic** (có `UNCLEAR`/`BEHAVIOR_MISMATCH` → ASK; chỉ `SPEC_ISSUE` → FIX; còn lại → PASS). Skill `02_verdict_writer.md` chỉ **diễn giải** verdict đã tính, KHÔNG được đổi — verdict quyết định workflow làm gì tiếp nên không thể phụ thuộc cách LLM diễn đạt.
 - Nếu verdict tổng thể là ASK: ghi checkpoint bằng `markStep("qa-verifier", ...)` từ `agents/runtime/memory.js` theo `knowledge/checkpoint-protocol.md`, dừng lại chờ người xác nhận — KHÔNG tự quyết định thay.
-- Ghi kết quả ra `memory/working/deliverable-verifier.md`.
+- Ghi kết quả ra `.qa-run/deliverables/deliverable-verifier.md`.
 
 ## Can
-- Đọc `memory/working/test-results.json`, `memory/working/ui-conventions.md`, `memory/working/deliverable-test-designer.md`, và ảnh `evidence/<TC_ID>-after.jpg` (chỉ ảnh `after` — `expect()` lo phần hiệu số/delta).
-- Ghi (ghi đè) `memory/working/deliverable-verifier.md`; gọi `markStep()` (ghi vào `memory/working/runs.db`, cơ chế checkpoint dùng chung cả pipeline) khi verdict là ASK.
+- Đọc `.qa-run/deliverables/test-results.json`, `.qa-run/deliverables/ui-conventions.md`, `.qa-run/deliverables/deliverable-test-designer.md`, và ảnh `.qa-run/evidence/<TC_ID>-after.jpg` (chỉ ảnh `after` — `expect()` lo phần hiệu số/delta).
+- Ghi (ghi đè) `.qa-run/deliverables/deliverable-verifier.md`; gọi `markStep()` (ghi vào `.qa-run/runs.db`, cơ chế checkpoint dùng chung cả pipeline) khi verdict là ASK.
 - Đọc trực tiếp (không copy) `agents/qa-leader/knowledge/task-management-conventions.md` mục 1 (định nghĩa PASS/FIX/ASK).
 
 ## Can't
 - Không tự chạy `.spec.ts` — `test-results.json` phải do người dùng/CI tạo ra trước.
-- Không tự generate hay suy đoán `memory/working/ui-conventions.md` nếu file chưa tồn tại — phải trả về lỗi rõ ràng (`status: "error"`), không tự tạo baseline giả để "có gì đó mà so sánh".
+- Không tự generate hay suy đoán `.qa-run/deliverables/ui-conventions.md` nếu file chưa tồn tại — phải trả về lỗi rõ ràng (`status: "error"`), không tự tạo baseline giả để "có gì đó mà so sánh".
 - Không tự quyết định 1 `BEHAVIOR_MISMATCH` là bug thật hay không — đó là verdict ASK, người dùng xác nhận rồi QA Reporter mới viết bug report chính thức.
 - Không định nghĩa lại PASS/FIX/ASK khác với `task-management-conventions.md` — chỉ mở rộng ví dụ cụ thể cho ngữ cảnh automation result, không đổi ý nghĩa gốc.
-- Không ghi đè `memory/working/deliverable-automation.md`, `memory/working/ui-conventions.md` hay `memory/working/deliverable-test-designer.md` — chỉ đọc.
+- Không ghi đè `.qa-run/deliverables/deliverable-automation.md`, `.qa-run/deliverables/ui-conventions.md` hay `.qa-run/deliverables/deliverable-test-designer.md` — chỉ đọc.
 - **Không dùng ảnh làm căn cứ pass/fail.** Ảnh chỉ được **hạ cấp** kết luận (pass → `UNCLEAR` để người xem); KHÔNG bao giờ biến test `fail` thành `PASSED`, và không bao giờ tự kết luận pass. Xem `agents/qa-automation/knowledge/oracle-problem.md` mục "Ranh giới của ảnh".
 - **Không coi ảnh thiếu / không đọc được là đồng ý.** Không có ảnh, ảnh `unreadable`, VLM lỗi, hay VLM tự đánh `confidence: low` → `UNCLEAR`, không phải `PASSED`.
 - **Không để LLM ghép 2 kênh hay quyết định verdict** — ghép và suy verdict là việc của `tools/verdict-combiner.js`. Skill `02_verdict_writer.md` chỉ diễn giải.
@@ -51,5 +51,5 @@ Chưa có skill revision — node này hiện single-shot, cùng quyết định
 - Cross-node (đọc trực tiếp, KHÔNG copy): `agents/qa-leader/knowledge/task-management-conventions.md` mục 1 (định nghĩa gốc PASS/FIX/ASK)
 
 ## Input/Output contract
-- Input received from (who calls, what format): gọi qua function call `run({ testResultsFile, uiConventionsFile, testCaseFile })` — mặc định lần lượt là `memory/working/test-results.json`, `memory/working/ui-conventions.md`, `memory/working/deliverable-test-designer.md`. Verifier tự `read_file` để lấy nội dung.
-- Output returned (what format): `{ status: "success"|"error", data: { deliverableFile: "memory/working/deliverable-verifier.md", verdict: "PASS"|"FIX"|"ASK" }, error }`. Trả `status: "error"` (không phải verdict) nếu thiếu `ui-conventions.md` hoặc `test-results.json`.
+- Input received from (who calls, what format): gọi qua function call `run({ testResultsFile, uiConventionsFile, testCaseFile })` — mặc định lần lượt là `.qa-run/deliverables/test-results.json`, `.qa-run/deliverables/ui-conventions.md`, `.qa-run/deliverables/deliverable-test-designer.md`. Verifier tự `read_file` để lấy nội dung.
+- Output returned (what format): `{ status: "success"|"error", data: { deliverableFile: ".qa-run/deliverables/deliverable-verifier.md", verdict: "PASS"|"FIX"|"ASK" }, error }`. Trả `status: "error"` (không phải verdict) nếu thiếu `ui-conventions.md` hoặc `test-results.json`.

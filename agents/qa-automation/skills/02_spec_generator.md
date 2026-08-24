@@ -1,11 +1,13 @@
 # Skill: Spec Generator
 
 ## Purpose
-Dùng ngay sau `01_exploratory_ui_discovery.md`. Sinh 1 file Playwright `.spec.ts` tĩnh — bước "freeze" của nguyên tắc explore-then-freeze (`oracle-problem.md`).
+ĐƯỜNG DỰ PHÒNG, chỉ dùng khi không có catalogue step để đi đường `.feature`. Sinh 1 file Playwright `.spec.ts` tĩnh — bước "freeze" của nguyên tắc explore-then-freeze (`oracle-problem.md`).
+
+> **Cảnh báo:** đây là đường CŨ, nơi LLM viết cả file spec. Nó đã sinh ra 13/21 spec không thực hiện hành động nào và 3 spec chứa selector `ref=` không bao giờ khớp. Đường chính là `05_gherkin_writer.md` → `tools/gherkin-codegen.js`, nơi LLM chỉ viết `.feature` và code sinh spec.
 
 Hai thay đổi quan trọng so với bản trước:
 
-1. **Không nhúng test data vào spec.** Data nằm ở `tests/data/test-cases.json` (sinh deterministic bởi `tools/testcase-exporter.js`). Spec **load** data theo `tcId`. Lý do: đổi data không phải sinh lại spec, tức không phải explore lại UI — xem `knowledge/mcp-cost-optimization.md`.
+1. **Không nhúng test data vào spec.** Data nằm ở `.qa-run/tests/data/test-cases.json` (sinh deterministic bởi `tools/testcase-exporter.js`). Spec **load** data theo `tcId`. Lý do: đổi data không phải sinh lại spec, tức không phải explore lại UI — xem `knowledge/mcp-cost-optimization.md`.
 2. **Chụp ảnh before/after.** Mỗi spec chụp 1 ảnh trước khi thực hiện các bước chính và 1 ảnh sau khi assert, để `qa-verifier` có evidence đối chiếu.
 
 ## Knowledge Reference
@@ -20,7 +22,7 @@ Template-based
 {{test_case}} — test case dạng object: `{ tcId, title, precondition, steps[], data: { fields }, expected, priority, tags }`
 {{known_locators}} — locator **do Playwright sinh** (`browser_generate_locator`), dạng `- role "name" -> locator`
 {{page_elements}} — node đã lọc trên trang (tham chiếu, KHÔNG dùng để tự viết selector)
-{{data_file}} — đường dẫn file data (`tests/data/test-cases.json`)
+{{data_file}} — đường dẫn file data (`.qa-run/tests/data/test-cases.json`)
 {{exploratory_finding}} — (nếu có) lệch phát hiện được giữa Expected Result và UI thật
 
 ## PROMPT
@@ -54,9 +56,9 @@ Yêu cầu:
 3. **Map mỗi Step → 1 hành động Playwright**, kèm comment là nguyên văn Step ở trên nó.
 4. **Ảnh before/after** — đúng 2 lệnh, đặt đúng chỗ:
    ```ts
-   await page.screenshot({ path: `evidence/${tc.tcId}-before.jpg`, type: 'jpeg', quality: 60, scale: 'css' });
+   await page.screenshot({ path: `.qa-run/evidence/${tc.tcId}-before.jpg`, type: 'jpeg', quality: 60, scale: 'css' });
    // ... các bước chính + assert ...
-   await page.screenshot({ path: `evidence/${tc.tcId}-after.jpg`, type: 'jpeg', quality: 60, scale: 'css' });
+   await page.screenshot({ path: `.qa-run/evidence/${tc.tcId}-after.jpg`, type: 'jpeg', quality: 60, scale: 'css' });
    ```
    Ảnh là **evidence**, KHÔNG phải căn cứ pass/fail.
 5. **Expected Result → ít nhất 1 `expect()` cụ thể.** Nếu Expected Result là hiệu số ("giảm đúng 140.000") thì assert bằng phép tính trên giá trị thật, không chỉ assert giá trị cuối. Đây là chỗ **duy nhất** quyết định pass/fail.
@@ -83,7 +85,7 @@ const tc = dataset.cases.find(c => c.tcId === 'TC-D-001')!;
 
 test('TC-D-001: Ap ma giam gia thanh cong', async ({ page }) => {
   await page.goto('/');   // baseURL do playwright.config.ts lấy từ cấu hình tầng 2
-  await page.screenshot({ path: `evidence/${tc.tcId}-before.jpg`, type: 'jpeg', quality: 60, scale: 'css' });
+  await page.screenshot({ path: `.qa-run/evidence/${tc.tcId}-before.jpg`, type: 'jpeg', quality: 60, scale: 'css' });
 
   // Nhập mã giảm giá
   await page.getByRole('textbox', { name: 'Mã giảm giá' }).fill(tc.data.fields.voucher_code);
@@ -93,7 +95,7 @@ test('TC-D-001: Ap ma giam gia thanh cong', async ({ page }) => {
 
   await expect(page.getByText('700.000')).toBeVisible();
 
-  await page.screenshot({ path: `evidence/${tc.tcId}-after.jpg`, type: 'jpeg', quality: 60, scale: 'css' });
+  await page.screenshot({ path: `.qa-run/evidence/${tc.tcId}-after.jpg`, type: 'jpeg', quality: 60, scale: 'css' });
 });
 ```
 

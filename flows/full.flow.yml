@@ -1,0 +1,126 @@
+# flows/full.flow.yml
+#
+# TOÀN BÀI: tài liệu dự án → phân tích → test case → code + spec → kiểm chứng → báo cáo.
+# Một lệnh duy nhất:
+#
+#   node qa.js run full "<tên task>" --confirm-mcp
+#
+# CHẠY LẠI ĐƯỢC. Bước nào đã xong thì bỏ qua, nên cứ chạy lại đúng lệnh này mỗi lần bạn vừa
+# làm xong phần việc của mình (điền gap-report, duyệt một bước, chạy playwright). Không cần
+# nhớ đang dở ở đâu — `node qa.js next` trả lời câu đó.
+#
+# BA ĐIỂM DỪNG CHỜ NGƯỜI, đều là CHỦ Ý chứ không phải thiếu sót:
+#   1. Điền `gap-report.md`  — thiếu thông tin nghiệp vụ, chỉ bạn trả lời được
+#   2. Duyệt từng bước       — đến lượt bạn ĐỌC và quyết (cửa Human-Final)
+#   3. Chạy playwright       — không agent nào tự chạy test
+
+name: full
+title: Toàn bài — tài liệu → báo cáo
+description: >-
+  Cả 6 node QA trong một luồng. Chạy lại được: bỏ qua bước đã xong, tiếp đúng chỗ đang dở.
+# Bước đầu là script và CHÍNH NÓ mở phiên, nên luồng này không đòi có phiên sẵn.
+requires_run: false
+
+params:
+  - name: task
+    kind: string
+    positional: true
+    note: tên task/feature cần phân tích — bắt buộc ở lần chạy đầu
+  - name: report-types
+    kind: list
+    default: daily,narrative
+    note: >-
+      KHÔNG mặc định sinh "bug". Verdict ASK nghĩa là người phải đọc deliverable-verifier.md
+      và tự xác định cái nào là bug thật; luồng không đoán thay.
+
+flags:
+  - name: new-run
+    note: mở phiên MỚI thay vì tiếp phiên đang mở
+  - name: confirm-mcp
+    note: cho phép qa-automation gọi MCP Playwright THẬT (mở trình duyệt tới base_url)
+  - name: vlm-all
+    note: soi ảnh MỌI test case, không chỉ test fail + test pass High/Critical
+  - name: no-gate
+    note: bỏ cửa duyệt người giữa các node — chỉ dùng khi demo nhanh
+
+steps:
+
+  # ── 1. QA Leader → QA Analyst ─────────────────────────────────────────
+  #
+  # Là SCRIPT, không phải node, và đó là chủ ý: nửa này có vòng hỏi–đáp theo TỪNG CÂU
+  # (gap-report có ô trả lời cho mỗi GAP-nnn, lần chạy sau chỉ nhắc câu còn trống, câu đã
+  # trả lời thì xác nhận lại và ghi vào decisions-log) cùng vòng review leader↔analyst trong
+  # đó FIX là ĐI LẠI cùng node. Khai báo không diễn đạt được, và bẻ nó vào khuôn khai báo là
+  # làm hỏng cả hai.
+  - script: workflow/leader-analyst.js
+    label: QA Leader → QA Analyst (hỏi–đáp + review)
+    args:
+      - $param.task
+    pass_flags:
+      - new-run
+    # Script thoát 0 CẢ KHI nó dừng để chờ bạn điền gap-report. Nên runner không tin mã thoát:
+    # nó kiểm bước này trong DB. Chưa `done` → dừng luồng, không đi tiếp.
+    expect_step: qa-analyst
+
+  # ── 2. Thiết kế test case — thuần LLM, không ra ngoài ──────────────────
+  - node: qa-test-designer
+    label: Thiết kế test case
+    # Thiết kế test case trên một bản phân tích chưa ai đọc là nhân cái sai lên 21 lần.
+    require_step: qa-analyst
+    gate: qa-analyst
+
+  # ── 3. Sinh code dùng lại + spec — GỌI MCP PLAYWRIGHT THẬT ─────────────
+  - node: qa-automation
+    label: Explore UI + sinh Page Object, step library, spec
+    # Cửa duyệt đặt TRƯỚC --confirm-mcp: mở trình duyệt thật lên site thật dựa trên một bảng
+    # test case chưa ai đọc là cái sai đắt nhất ở đây.
+    gate: qa-test-designer
+    confirm_flag: confirm-mcp
+    confirm_reason: >-
+      mở trình duyệt THẬT tới base_url (tầng 2) để explore DOM và để Playwright sinh locator
+    # Chạy lại sau verdict FIX: test-results.json cũ được đo trên spec CŨ. Giữ lại là đem kết
+    # quả của một phiên bản spec đi kiểm chứng một phiên bản spec khác.
+    delete_stale:
+      - TEST_RESULTS
+
+  # ── 4. Kiểm chứng ─────────────────────────────────────────────────────
+  - node: qa-verifier
+    label: Kiểm chứng kết quả chạy
+    # Node này KHÔNG tự chạy .spec.ts — người/CI chạy. Xem agents/qa-verifier/role.md.
+    wait_for_file: TEST_RESULTS
+    wait_for_hint: npx playwright test --reporter=json
+    # Spec sinh ra test-results.json phải được người đọc trước khi kết quả của nó biến thành
+    # "bug", nếu không thì một spec sai âm thầm trở thành lỗi sản phẩm.
+    gate: qa-automation
+    with:
+      vlmAll: $flag.vlm-all
+    branch_on: verdict
+    branch:
+      - value: PASS
+        action: continue
+      - value: ASK
+        action: stop
+        message: >-
+          Verifier cần người xác nhận. Đọc deliverable-verifier.md — xác định các test
+          BEHAVIOR_MISMATCH/UNCLEAR có phải bug thật không. Sau đó chạy lại luồng này với
+          --report-types=bug; luồng không đoán thay bạn.
+      - value: FIX
+        action: rework
+        rework_node: qa-automation
+        rework_note: "Verifier: SPEC_ISSUE — spec lỗi thời so với ui-conventions.md"
+        message: >-
+          Verdict FIX — spec đã lỗi thời so với UI thật, KHÔNG phải lỗi sản phẩm. Chạy lại
+          đúng lệnh này (kèm --confirm-mcp) để qa-automation explore lại và sinh spec mới.
+
+  # ── 5. Báo cáo ────────────────────────────────────────────────────────
+  - node: qa-reporter
+    label: Viết báo cáo
+    # Báo cáo là thứ ra khỏi nhóm, nên verdict đằng sau nó là thứ cuối cùng cần người ký.
+    # Bước này SẼ chặn ở lần chạy đầu — qa-verifier vừa được đánh done và chưa ai duyệt.
+    # Đó là cửa duyệt đang làm việc, không phải lỗi.
+    gate: qa-verifier
+    with:
+      reportTypes: $param.report-types
+
+# Hết pipeline: đóng phiên để nó thành lịch sử, thay vì `active` mãi mãi.
+finish: done

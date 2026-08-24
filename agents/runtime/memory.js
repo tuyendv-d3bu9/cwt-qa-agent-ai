@@ -1,7 +1,7 @@
 // agents/runtime/memory.js
 // Tier 5 — run/session state and the human-approval gate. See memory/README.md.
 //
-// Backend: memory/working/runs.db (table `runs`, `run_steps`, `session`).
+// Backend: .qa-run/runs.db (table `runs`, `run_steps`, `session`) - see paths.js RUNS_DB.
 // It used to be a single JSON file, memory/working/workflow.json, which could hold
 // exactly ONE run: every new feature appended to the same steps[] array, `run_id`
 // stayed null forever, and finishing a run erased the previous one. There was no way
@@ -21,6 +21,8 @@ import { existsSync, readFileSync, renameSync } from "node:fs";
 import path from "node:path";
 import { db, RUNS_DB } from "./db.js";
 
+// Historical location, kept only so importLegacyJson() can still find and adopt a state
+// file written before the DB backend existed. Nothing writes here any more.
 const LEGACY_STATE_FILE = path.resolve(process.cwd(), "memory/working/workflow.json");
 
 /** Fields a step actually has. Anything else is a typo, and the old JSON backend
@@ -163,13 +165,30 @@ export async function saveState(state) {
   return loadState();
 }
 
-/** The run flow-2/flow-3 are currently working on, or null. */
+/** The run the current flow is working on, or null. */
 export async function currentRun() {
   return currentRunRow();
 }
 
 export async function listRuns(limit = 10) {
   return handle().prepare(`SELECT * FROM runs ORDER BY created_at DESC, rowid DESC LIMIT ?`).all(limit);
+}
+
+/**
+ * Steps of ANY run, not just the current session's.
+ *
+ * loadState() is deliberately scoped to the CURRENT run — that is what the pipeline needs,
+ * and letting a node read another run's state would blur the session boundary that K exists
+ * to draw. Supervision is the one legitimate cross-run reader: qa-leader's job there is to
+ * look at every run at once (agents/qa-leader/tools/run-supervisor.js), which loadState()
+ * cannot express.
+ */
+export async function stepsOfRun(runId) {
+  if (!runId) return [];
+  return handle()
+    .prepare(`SELECT * FROM run_steps WHERE run_id = ? ORDER BY rowid`)
+    .all(runId)
+    .map(stepFromRow);
 }
 
 /**
@@ -211,7 +230,7 @@ function ensureRun() {
   handle().prepare(`INSERT INTO runs (run_id, feature, created_at, status) VALUES (?, NULL, ?, 'active')`)
     .run(runId, createdAt);
   setCurrentRun(runId);
-  console.warn(`[memory] Chưa có phiên nào đang mở — đã tự tạo run "${runId}" (chưa gán feature). Chạy qua workflow/flow-2 để phiên có tên feature.`);
+  console.warn(`[memory] Chưa có phiên nào đang mở — đã tự tạo run "${runId}" (chưa gán feature). Chạy qua node qa.js run analyze "<tên task>" để phiên có tên feature.`);
   return currentRunRow();
 }
 
@@ -272,7 +291,7 @@ export async function markStep(agent, patch = {}) {
 
 export async function approveStep(agent, by) {
   const run = currentRunRow();
-  if (!run) throw new Error(`Chưa có phiên nào để duyệt. Chạy workflow/flow-2 trước.`);
+  if (!run) throw new Error(`Chưa có phiên nào để duyệt. Chạy node qa.js run analyze "<tên task>" trước.`);
   const exists = handle().prepare(`SELECT 1 FROM run_steps WHERE run_id = ? AND agent = ?`).get(run.run_id, agent);
   if (!exists) {
     throw new Error(
@@ -287,7 +306,7 @@ export async function approveStep(agent, by) {
 export async function requireApproved(agent) {
   const state = await loadState();
   if (!state.run_id) {
-    throw new Error(`Chưa có phiên nào đang mở. Chạy workflow/flow-2-leader-analyst.js trước.`);
+    throw new Error(`Chưa có phiên nào đang mở. Chạy node qa.js run analyze "<tên task>" trước.`);
   }
   const step = state.steps.find(s => s.agent === agent);
   if (!step || step.status !== "done") {

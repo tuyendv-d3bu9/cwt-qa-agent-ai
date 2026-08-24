@@ -1,6 +1,6 @@
 // agents/approve.js
 // The human half of the Human-Final gate: mark one node's deliverable as reviewed so
-// workflow/flow-3 will let the next node run. Called with no arguments it is also the
+// the flow runner will let the next node run. Called with no arguments it is also the
 // "what state am I in?" command — current run, its steps, and previous runs.
 import "dotenv/config";
 import { approveStep, printState } from "./runtime/memory.js";

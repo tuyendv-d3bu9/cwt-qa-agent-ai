@@ -3,6 +3,18 @@
 ## Purpose
 Dùng sau `01_requirement_summary.md` — dùng framework 06W từ `memory/semantic/06W.md` để chủ động tìm business rule chưa được đề cập, thay vì chỉ tóm tắt lại những gì đã có.
 
+## ⚠ PHẠM VI OUTPUT — chỉ mục 2
+
+Output là nội dung của ĐÚNG MỘT mục: `## 2. Missing Business Rules (6W)`.
+**`agents/qa-analyst/index.js` lắp file, không phải bạn.**
+
+KHÔNG viết lại Requirement Summary (đã có sẵn trong input), KHÔNG viết Viewpoints & Test Ideas
+(đó là skill `03`), KHÔNG viết Self Count Check (đó là tool `count-check.js`).
+Dùng `###` nếu cần heading con, KHÔNG dùng `##`.
+
+Bộ đếm `count-check.js` đếm **số dòng dữ liệu của bảng** — giữ đúng dạng bảng markdown, đừng
+chuyển sang danh sách gạch đầu dòng.
+
 ## Knowledge Reference
 - `memory/semantic/06W.md` — framework 06W (6 dimension tìm missing rule).
 - `knowledge/analysis-integrity.md` — rule chỉ tạo missing rule khi source chưa xác định, không suy diễn tùy tiện.

@@ -9,7 +9,7 @@ Convention / Agent Rule
 
 QA Analyst chịu trách nhiệm phân tích task được QA Leader giao và tạo QA deliverable dựa trên:
 
-- `memory/working/task-assignment.md`
+- `.qa-run/deliverables/task-assignment.md`
 - Tài liệu trong `project-docs/`
 - Các nguồn thông tin được task assignment chỉ định.
 
@@ -21,7 +21,7 @@ QA Analyst **không tự mở rộng scope** ngoài task được giao.
 
 > Xem định nghĩa đầy đủ tại: `memory/semantic/fact-framework.md`
 
-Trước khi ghi `memory/working/deliverable-analyst.md`, QA Analyst phải tự kiểm theo 4 tiêu chí FACT (Faithful, Accurate, Complete, Testable).
+Trước khi ghi `.qa-run/deliverables/deliverable-analyst.md`, QA Analyst phải tự kiểm theo 4 tiêu chí FACT (Faithful, Accurate, Complete, Testable).
 
 Không ghi deliverable nếu phát hiện lỗi có thể tự sửa.
 
@@ -49,7 +49,7 @@ Phân biệt:
 
 QA Analyst chỉ xử lý:
 
-- Task được giao trong `memory/working/task-assignment.md`.
+- Task được giao trong `.qa-run/deliverables/task-assignment.md`.
 - Các requirement và behavior liên quan trực tiếp đến task.
 - Các dependency cần thiết để xác định expected behavior.
 
@@ -58,7 +58,7 @@ QA Analyst không tự:
 - Phân công task.
 - Đánh giá deliverable của chính mình là PASS/FIX.
 - Thay đổi task assignment.
-- Ghi `memory/working/task-assignment.md`.
+- Ghi `.qa-run/deliverables/task-assignment.md`.
 - Ghi các file workflow thuộc quyền của QA Leader.
 
 ---
@@ -67,18 +67,18 @@ QA Analyst không tự:
 
 QA Analyst:
 
-- **Chỉ đọc** `memory/working/task-assignment.md`.
-- **Chỉ ghi** `memory/working/deliverable-analyst.md`.
-- Không ghi đè `memory/working/task-assignment.md`.
+- **Chỉ đọc** `.qa-run/deliverables/task-assignment.md`.
+- **Chỉ ghi** `.qa-run/deliverables/deliverable-analyst.md`.
+- Không ghi đè `.qa-run/deliverables/task-assignment.md`.
 - Không tạo `deliverable_v2.md`, `deliverable_round2.md`, hoặc các file deliverable khác.
 
 Mỗi lần được QA Leader yêu cầu FIX:
 
-1. Đọc lại `memory/working/task-assignment.md`.
+1. Đọc lại `.qa-run/deliverables/task-assignment.md`.
 2. Đọc feedback của round hiện tại.
 3. Kiểm tra lại source documents liên quan.
-4. Sửa `memory/working/deliverable-analyst.md`.
-5. Ghi đè vào đúng `memory/working/deliverable-analyst.md`.
+4. Sửa `.qa-run/deliverables/deliverable-analyst.md`.
+5. Ghi đè vào đúng `.qa-run/deliverables/deliverable-analyst.md`.
 
 ---
 
@@ -96,7 +96,7 @@ Khi QA Leader trả về `FIX`:
 
 ### 7. Deliverable Contract
 
-Trước khi ghi `memory/working/deliverable-analyst.md`, QA Analyst phải đảm bảo:
+Trước khi ghi `.qa-run/deliverables/deliverable-analyst.md`, QA Analyst phải đảm bảo:
 
 - Output đúng schema được yêu cầu bởi task/skill.
 - Không chứa thông tin không có nguồn.
@@ -130,7 +130,7 @@ QA Analyst được coi là hoàn thành deliverable khi:
 2. Đã kiểm tra các source documents liên quan.
 3. Đã hoàn thành output theo schema.
 4. Đã thực hiện FACT self-check.
-5. Đã ghi kết quả vào `memory/working/deliverable-analyst.md`.
+5. Đã ghi kết quả vào `.qa-run/deliverables/deliverable-analyst.md`.
 6. Không còn lỗi mà QA Analyst có thể tự sửa.
 7. Các blocker không thể tự giải quyết đã được ghi rõ.
 

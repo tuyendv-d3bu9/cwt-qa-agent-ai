@@ -51,7 +51,7 @@ changed_documents = [{ "file": "docs/api-spec.md", "reason": "nội dung đã đ
 impact_data = { "total": 3, "affected": [
   { "kind": "section", "ref": "memory/project/domain-facts.md#Ràng buộc mã giảm giá", "causedBy": ["docs/api-spec.md"] },
   { "kind": "testcase", "ref": "TC-D-004", "causedBy": ["docs/api-spec.md"] },
-  { "kind": "spec", "ref": "tests/TC-D-004.spec.ts", "causedBy": ["docs/api-spec.md"] }] }
+  { "kind": "spec", "ref": ".qa-run/tests/TC-D-004.spec.ts", "causedBy": ["docs/api-spec.md"] }] }
 
 ## Sample Output
 ```markdown
@@ -61,7 +61,7 @@ impact_data = { "total": 3, "affected": [
 ### Vì sao từng artifact bị ảnh hưởng
 - Mục `Ràng buộc mã giảm giá` (domain-facts): chưng cất trực tiếp từ tài liệu này, ràng buộc đã đổi.
 - `TC-D-004`: test case bám vào ràng buộc trên, giá trị biên trong Test Data có thể không còn đúng.
-- `tests/TC-D-004.spec.ts`: sinh từ `TC-D-004`, đang assert theo giá trị biên cũ.
+- `.qa-run/tests/TC-D-004.spec.ts`: sinh từ `TC-D-004`, đang assert theo giá trị biên cũ.
 
 ### Thứ tự xử lý đề xuất
 1. Review mục tri thức đã được ghi lại — **cần người xác nhận** ràng buộc mới đúng như hiểu.

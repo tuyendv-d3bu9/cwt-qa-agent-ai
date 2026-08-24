@@ -6,10 +6,10 @@ Convention / Rule
 ## Content
 
 Mọi field trong bug report và QA Summary Report phải trace được về 1 trong các nguồn thật sau:
-- TC_ID + nhãn (BEHAVIOR_MISMATCH/UNCLEAR) trong `memory/working/deliverable-verifier.md`.
-- Steps/Test Data/Expected Result gốc trong `memory/working/deliverable-test-designer.md`.
+- TC_ID + nhãn (BEHAVIOR_MISMATCH/UNCLEAR) trong `.qa-run/deliverables/deliverable-verifier.md`.
+- Steps/Test Data/Expected Result gốc trong `.qa-run/deliverables/deliverable-test-designer.md`.
 - `errorMessage` thật từ `test-results.json` (đã đi qua Verifier).
-- File evidence thật trong `evidence/` (chỉ trích dẫn đường dẫn).
+- File evidence thật trong `.qa-run/evidence/` (chỉ trích dẫn đường dẫn).
 
 ### Rule cứng
 - KHÔNG suy diễn hay điền placeholder "cho có nội dung" khi thiếu thông tin.

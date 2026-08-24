@@ -41,7 +41,7 @@ Với **N** test case và **M** bước mỗi test case, bản đầu gọi LLM:
 Cộng thêm 2 cơ chế tránh làm lại:
 
 8. **Bỏ qua spec không đổi.** Có file spec + hash test case không đổi + không bị impact analysis đánh `stale` → không explore, không sinh lại. Nếu **không có gì** cần làm thì **không mở trình duyệt**.
-9. **Data tách khỏi spec** (`tests/data/test-cases.json`). Đổi test data không cần sinh lại spec, tức không cần explore lại.
+9. **Data tách khỏi spec** (`.qa-run/tests/data/test-cases.json`). Đổi test data không cần sinh lại spec, tức không cần explore lại.
 
 ### Đo, không tuyên bố
 

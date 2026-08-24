@@ -1,12 +1,12 @@
 # Skill: Bug Report Writer
 
 ## Purpose
-Dùng cho mỗi TC_ID nhãn `BEHAVIOR_MISMATCH` hoặc `UNCLEAR` trong `memory/working/deliverable-verifier.md`. Viết bug report DRAFT theo 7 trường chuẩn — đây là draft dựa trên nghi ngờ có căn cứ, chưa phải kết luận cuối cùng đã qua xác nhận con người.
+Dùng cho mỗi TC_ID nhãn `BEHAVIOR_MISMATCH` hoặc `UNCLEAR` trong `.qa-run/deliverables/deliverable-verifier.md`. Viết bug report DRAFT theo 7 trường chuẩn — đây là draft dựa trên nghi ngờ có căn cứ, chưa phải kết luận cuối cùng đã qua xác nhận con người.
 
 ## Knowledge Reference
 - `knowledge/bug-report-schema.md` — 7 trường, phân biệt Severity/Priority, rule "luôn review trước khi dùng".
 - `knowledge/traceability-rule.md` — dùng `[CẦN BỔ SUNG]` khi thiếu evidence, không bịa.
-- `knowledge/output-conventions.md` — sau khi viết xong 1 bug draft, `index.js` gom theo Severity vào đúng `output/bug-reports/{critical,major,minor}.md` (skill này chỉ viết 1 draft/lần, KHÔNG tự quyết định file đích).
+- `knowledge/output-conventions.md` — sau khi viết xong 1 bug draft, `index.js` gom theo Severity vào đúng `.qa-run/reports/bug-reports/{critical,major,minor}.md` (skill này chỉ viết 1 draft/lần, KHÔNG tự quyết định file đích).
 
 ## Prompt Type
 Template-based
@@ -47,7 +47,7 @@ Trạng thái: DRAFT — chờ xác nhận con người trước khi coi là bug
 |---|---|
 | Title | [CẦN BỔ SUNG: chưa đủ căn cứ đặt tên lỗi cụ thể] |
 | Environment | <URL môi trường test từ cấu hình tầng 2>, Chromium qua MCP Playwright (headless) |
-| Evidence | `evidence/TC-D-004-after.jpg` |
+| Evidence | `.qa-run/evidence/TC-D-004-after.jpg` |
 | Steps to Reproduce | 1. Vào checkout 2. Nhập mã SALE20 3. Bấm Áp dụng |
 | Actual Result | Không tìm thấy ô nhập mã lúc chạy test, dù ui-conventions.md ghi nhận ô này tồn tại nhất quán — [CẦN BỔ SUNG: cần chạy lại để xác nhận có phải lỗi tạm thời] |
 | Expected Result | Áp mã thành công |

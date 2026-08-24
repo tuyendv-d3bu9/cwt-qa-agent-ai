@@ -1,7 +1,7 @@
 # Skill: Revise On Feedback
 
 ## Purpose
-Dùng khi `memory/working/task-assignment.md` đã có thêm mục "## Feedback vòng N (FIX)" do QA Leader ghi vào (sau khi review theo FACT). Sửa đúng điểm được chỉ ra — **không viết lại toàn bộ deliverable từ đầu**.
+Dùng khi `.qa-run/deliverables/task-assignment.md` đã có thêm mục "## Feedback vòng N (FIX)" do QA Leader ghi vào (sau khi review theo FACT). Sửa đúng điểm được chỉ ra — **không viết lại toàn bộ deliverable từ đầu**.
 
 ## Knowledge Reference
 - `memory/semantic/fact-framework.md` — FACT self-check (Section 2) + FIX Round rules (Section 6) + File Boundary (Section 5).

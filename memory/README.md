@@ -22,11 +22,33 @@ Hệ quả quan trọng: **thứ ít đổi + tra cứu theo nhu cầu thì vào
 |---|---|---|---|---|---|
 **1. Semantic** | `memory/semantic/` | Phương pháp luận dùng cho **mọi** dự án: FACT, 06W, quy ước kiểm thử | Gần như không đổi | Nạp cả vào prompt | Người |
 **2. Reference** | `memory/project/knowledge.db` | Tri thức tham chiếu **ổn định** của dự án: thuật ngữ, thành phần, field + ràng buộc, cấu hình | Ít đổi | **Truy vấn** — chỉ lấy phần liên quan | `qa-leader` (sau khi phân tích) |
-**3. Working knowledge** | `memory/project/*.md` | Tri thức dự án theo mục đích, **đổi thường xuyên**: domain facts, known issues, decisions | Thường xuyên | Nạp cả vào prompt | `qa-leader` ghi + **người sửa tay** |
-**4. Run data** | `memory/working/*` | Dữ liệu của **1 lần chạy**: deliverable từng node, gap report, oracle, kết quả test, evidence | Mỗi lần chạy | Đọc/ghi file trực tiếp | Agent |
-**5. Session state** | `memory/working/runs.db` | Trạng thái phiên, cửa duyệt người, lịch sử run | Mỗi bước | Qua `agents/runtime/memory.js` | Workflow |
+**3. Working knowledge** | `memory/project/*.md` | Tri thức dự án theo mục đích, **đổi thường xuyên**: domain facts, known issues, decisions, **ui-flows** | Thường xuyên | Nạp cả vào prompt | `qa-leader` ghi + **người sửa tay** |
+**4. Run data** | `.qa-run/*` | Dữ liệu của **1 lần chạy**: deliverable từng node, gap report, oracle, spec sinh ra, feature, evidence, report | Mỗi lần chạy | Đọc/ghi qua `agents/runtime/paths.js` | Agent |
+**5. Session state** | `.qa-run/runs.db` | Trạng thái phiên, cửa duyệt người, lịch sử **nhiều** run | Mỗi bước | Qua `agents/runtime/memory.js` | Workflow |
 
 Tầng 4 và 5 là dữ liệu tạm, không đi theo git. Tầng 1 và 3 đi theo git. Tầng 2 tái tạo được từ tầng nguồn (`project-docs/`).
+
+### Ranh giới thứ 3: sản phẩm vs CODE DÙNG LẠI
+
+Ngoài "tri thức vs sản phẩm", còn một ranh giới nữa dễ bị bỏ qua:
+
+```
+memory/                     TRI THỨC     — commit, người sửa tay được
+tests/steps/  tests/pages/  CODE DÙNG LẠI — commit, người review
+.qa-run/                    SẢN PHẨM      — gitignore, xoá tự do, sinh lại được
+```
+
+`tests/steps/` và `tests/pages/` **được sinh tự động** (từ luồng đã đi qua × registry) nhưng
+**vẫn commit**: chúng là thứ viết một lần rồi 21 test case cùng gọi. Còn `.qa-run/tests/*.spec.ts`
+là output từng test case. Gitignore cả hai — như kế hoạch ban đầu — sẽ bỏ mất đúng nửa dùng lại được.
+
+### Chỗ khai đường dẫn: `agents/runtime/paths.js`
+
+Mọi đường dẫn ở trên khai **một chỗ duy nhất**. Trước đó chúng rải trong 13 file `.js`
+(riêng `deliverable-test-designer.md` xuất hiện 9 lần) + hơn chục file `.md`, nên đổi thư mục là
+chắc chắn sót một chỗ, và chỗ sót thành một node đọc file không ai còn ghi.
+`playwright.config.ts` cũng import từ đây — nếu không thì runner và agent có thể bất đồng về vị trí
+`test-results.json`, và verifier sẽ đọc một file không ai tạo.
 
 ---
 

@@ -3,6 +3,26 @@
 ## Purpose
 Dùng sau `02_missing_rule_finder.md` — chọn viewpoint phù hợp nhất (từ 8 viewpoint trong `knowledge/viewpoint-library.md`) theo tiêu chí Business Impact × Likelihood × Detectability, sau đó sinh test idea cho mỗi viewpoint.
 
+## ⚠ PHẠM VI OUTPUT — chỉ mục 3
+
+Output là nội dung của ĐÚNG MỘT mục: `## 3. Viewpoints & Test Ideas`.
+**`agents/qa-analyst/index.js` lắp file, không phải bạn.**
+
+KHÔNG viết lại Requirement Summary hay Missing Rules (đã có sẵn trong input), KHÔNG viết
+Self Count Check (đó là tool `count-check.js`). Dùng `###` cho heading con, KHÔNG dùng `##`.
+
+**Định dạng BẮT BUỘC** — bộ đếm `count-check.js` dựa vào đúng định dạng này. Sai định dạng thì nó
+đếm được **0 idea** và bản của bạn bị trả lại dù nội dung đã đủ:
+
+```
+### Viewpoint 1: <tên viewpoint>
+1. <test idea>
+2. <test idea>
+
+### Viewpoint 2: <tên viewpoint>
+1. <test idea>
+```
+
 ## Knowledge Reference
 - `knowledge/viewpoint-library.md` — 8 viewpoint của QA và tiêu chí selection (Business Impact × Likelihood × Detectability).
 - `knowledge/analysis-integrity.md` — source integrity và boundary khi viết test idea.

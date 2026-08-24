@@ -1,7 +1,7 @@
 # Skill: Test Case Formatter
 
 ## Purpose
-Dùng cuối cùng, sau `01_coverage_strategy.md` và `02_boundary_generator.md`. Gộp kết quả 2 skill trước thành test case hoàn chỉnh theo 8 trường chuẩn, sẵn sàng ghi vào `memory/working/deliverable-test-designer.md`.
+Dùng cuối cùng, sau `01_coverage_strategy.md` và `02_boundary_generator.md`. Gộp kết quả 2 skill trước thành test case hoàn chỉnh theo 8 trường chuẩn, sẵn sàng ghi vào `.qa-run/deliverables/deliverable-test-designer.md`.
 
 ## Knowledge Reference
 - `memory/semantic/testing-conventions.md` (cross-node) — TC_ID convention (`TC-D-<nnn>`), 4 mức Priority, 8 trường chuẩn.

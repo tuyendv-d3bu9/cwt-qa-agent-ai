@@ -36,6 +36,24 @@ export const WHITELIST = [
     "browser_snapshot",
 ];
 
+/**
+ * End-of-word assertion that actually works on Vietnamese.
+ *
+ * `\b` in JavaScript regex (without the `u` flag) counts ONLY [A-Za-z0-9_] as word
+ * characters. So a verb ending in a diacritic letter has no word boundary after it and
+ * `/^(mở)\b/` NEVER matches "Mở https://…" — verified: `\b` returns false for `mở`, `gõ`,
+ * `hiển thị`, `kết quả`, while it returns true for `vào`, `nhập`, `bấm` (which happen to
+ * end in plain ASCII letters).
+ *
+ * The damage was silent, which is why it survived: a rule that never fires just drops the
+ * step through to tier 3 (the LLM), producing *something* plausible while quietly paying
+ * for a decision a free rule was written to make. Nothing errors, nothing logs.
+ *
+ * `(?![\p{L}\p{N}])` + the `u` flag says what `\b` was meant to say: not followed by
+ * another letter or digit, in ANY language.
+ */
+const EOW = "(?![\\p{L}\\p{N}])";
+
 /** Strip a leading ordinal ("1. ", "Bước 2:") and surrounding noise. */
 function clean(step) {
     return String(step ?? "").trim().replace(/^(bước\s*)?\d+[.):]\s*/i, "").trim();
@@ -52,17 +70,30 @@ function quoted(text) {
 const RULES = [
     {
         name: "navigate",
-        // "Vào trang checkout", "Mở URL ...", "Truy cập trang giỏ hàng"
-        test: (s) => /^(vào|mở|truy cập|điều hướng|đi (tới|đến))\b/i.test(s),
+        // "Mở https://...", "Truy cập http://..." — an ACTUAL url, unambiguous.
+        // "Vào checkout" / "Vào trang giỏ hàng" without a URL used to match this same verb
+        // and silently become browser_navigate(base_url) — re-loading the HOME page no
+        // matter what "checkout" meant. On a real run this fired on every "Vào checkout"
+        // step (ShopGo has no /checkout route — it's a button on the same page) and reset
+        // the browser to the homepage right before the next step, which is why several
+        // "after" screenshots showed the homepage instead of the checkout state. A rule
+        // that cannot tell "go to this URL" from "proceed to this business step" must not
+        // guess — return a miss so tier-3 (LLM + real candidate nodes, including every
+        // interactive element on the page) decides instead of a fabricated navigate.
+        // `\\S` (not `\S`): this is a TEMPLATE LITERAL, so `\S` would be the unknown escape
+        // `\S` -> plain `S`, making the pattern `https?://S+` — which then matches only URLs
+        // whose host happens to start with "s" (case-insensitively). It silently "worked"
+        // against `https://shop.example.com` and failed on the real `https://cwshopgo.github.io/`.
+        test: (s) => new RegExp(`^(vào|mở|truy cập|điều hướng|đi (tới|đến))${EOW}.*https?://\\S+`, "iu").test(s),
         build: (s) => {
-            const url = /(https?:\/\/\S+)/.exec(s)?.[1] ?? null;
-            return { action: "navigate", tool: STEP_TOOLS.navigate, url, target: url ? null : stripVerb(s), args: url ? { url } : {} };
+            const url = /(https?:\/\/\S+)/.exec(s)[1];
+            return { action: "navigate", tool: STEP_TOOLS.navigate, url, target: null, args: { url } };
         },
     },
     {
         name: "type",
         // "Nhập SALE20 vào ô Mã giảm giá", "Điền 100000 vào trường order_total"
-        test: (s) => /^(nhập|điền|gõ|type|fill)\b/i.test(s),
+        test: (s) => new RegExp(`^(nhập|điền|gõ|type|fill)${EOW}`, "iu").test(s),
         build: (s) => {
             const m = /^(?:nhập|điền|gõ|type|fill)\s+(.+?)\s+(?:vào|into)\s+(?:ô|trường|field|input|box)?\s*(.+)$/i.exec(s);
             const value = m ? unquote(m[1]) : quoted(s);
@@ -76,7 +107,7 @@ const RULES = [
     {
         name: "press",
         // "Nhấn Enter", "Bấm phím Tab"
-        test: (s) => /\b(enter|tab|escape|esc|space|backspace)\b/i.test(s) && /^(nhấn|bấm|press)\b/i.test(s),
+        test: (s) => /\b(enter|tab|escape|esc|space|backspace)\b/i.test(s) && new RegExp(`^(nhấn|bấm|press)${EOW}`, "iu").test(s),
         build: (s) => {
             const key = /\b(enter|tab|escape|esc|space|backspace)\b/i.exec(s)[1].toLowerCase();
             const normalized = { esc: "Escape", escape: "Escape", enter: "Enter", tab: "Tab", space: " ", backspace: "Backspace" }[key];
@@ -86,13 +117,13 @@ const RULES = [
     {
         name: "click",
         // "Bấm nút Áp dụng", "Click vào Thanh toán", "Nhấn Xoá mã"
-        test: (s) => /^(bấm|nhấn|click|chọn nút|tap)\b/i.test(s),
+        test: (s) => new RegExp(`^(bấm|nhấn|click|chọn nút|tap)${EOW}`, "iu").test(s),
         build: (s) => ({ action: "click", tool: STEP_TOOLS.click, target: stripVerb(s), args: {} }),
     },
     {
         name: "select",
         // "Chọn Hà Nội trong dropdown Tỉnh/Thành"
-        test: (s) => /^chọn\b/i.test(s) && /(trong|từ|ở)\s+(dropdown|combobox|danh sách|select)/i.test(s),
+        test: (s) => new RegExp(`^chọn${EOW}`, "iu").test(s) && /(trong|từ|ở)\s+(dropdown|combobox|danh sách|select)/i.test(s),
         build: (s) => {
             const m = /^chọn\s+(.+?)\s+(?:trong|từ|ở)\s+(?:dropdown|combobox|danh sách|select)?\s*(.*)$/i.exec(s);
             return { action: "select", tool: STEP_TOOLS.select, value: m ? unquote(m[1]) : null, target: m ? unquote(m[2]) : null, args: {} };
@@ -102,7 +133,7 @@ const RULES = [
         name: "expectation",
         // "Kiểm tra tổng tiền giảm còn 700.000" — mô tả kỳ vọng, KHÔNG phải hành động.
         // Nhận diện để không tốn 1 lượt LLM chỉ để kết luận "không cần làm gì".
-        test: (s) => /^(kiểm tra|verify|xác nhận|quan sát|thấy|hiển thị|kết quả)\b/i.test(s),
+        test: (s) => new RegExp(`^(kiểm tra|verify|xác nhận|quan sát|thấy|hiển thị|kết quả)${EOW}`, "iu").test(s),
         build: (s) => ({ action: "expectation", tool: null, target: null, args: {}, note: "Bước mô tả kỳ vọng, không phải hành động" }),
     },
 ];

@@ -18,9 +18,10 @@
 //                       question markdown cannot: "document X changed — which
 //                       sections, test cases and specs are now stale?"
 //
-// TWO DATABASE FILES, one module — both are regenerable and neither is committed:
-//   memory/project/knowledge.db — tier 2 (rebuilt by re-running document analysis)
-//   memory/working/runs.db      — tier 5, run/session state
+// TWO DATABASE FILES, one module — both are regenerable and neither is committed.
+// Locations come from agents/runtime/paths.js (tri thức vs sản phẩm):
+//   memory/project/knowledge.db — tier 2, KNOWLEDGE (rebuilt by re-running doc analysis)
+//   .qa-run/runs.db             — tier 5, one run's session state
 //
 // node:sqlite is built into Node >=22.5 (verified working on Node v22.18 without any
 // flag), so this adds no npm dependency and no native build step. It prints
@@ -34,11 +35,27 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
+import * as P from "./paths.js";
 
+// ⚠ CHỐT MỘT LẦN, LÚC NẠP MODULE — không đọc lại `process.cwd()` sau đó.
+//
+// Hệ quả phải biết: `process.chdir()` SAU khi module này được import thì KHÔNG đổi được DB
+// đang dùng. Bộ test nào muốn cách ly bằng sandbox thì phải `chdir` **trước** khi import bất
+// cứ thứ gì kéo theo file này (memory.js, flow-runner.js, mọi agent index.js…).
+//
+// Đã có người (tôi) làm sai thứ tự đó: một bộ test import db.js trước khi chdir, và các ca
+// test ghi thẳng vào `.qa-run/runs.db` thật — tạo run rác VÀ đổi `session.run_id`, tức là
+// chiếm phiên đang làm việc của người dùng. `RUNS_DB_ABS` dưới đây được export để bộ test
+// **chứng minh được** nó đang cách ly, thay vì tin là thế.
 const ROOT = process.cwd();
 
-export const KNOWLEDGE_DB = "memory/project/knowledge.db";
-export const RUNS_DB = "memory/working/runs.db";
+// Re-exported (not re-declared) so paths.js stays the single source of truth for
+// locations while existing importers of db.js keep working unchanged.
+export const KNOWLEDGE_DB = P.KNOWLEDGE_DB;
+export const RUNS_DB = P.RUNS_DB;
+
+/** Đường dẫn TUYỆT ĐỐI của runs.db như đã chốt lúc nạp module. Dùng để test tự kiểm cách ly. */
+export const RUNS_DB_ABS = path.resolve(ROOT, P.RUNS_DB);
 
 // Which file the tier-2 helpers below read/write. Overridable ONLY so tests do not
 // mix their rows into the real knowledge DB — see useKnowledgeDb().
@@ -154,7 +171,7 @@ const SCHEMAS = {
      )`,
 
     // "Phiên hiện tại" — the one thing the old JSON backend could not express.
-    // A single row (CHECK id = 1) pointing at the run that flow-2/flow-3 are
+    // A single row (CHECK id = 1) pointing at the run the current flow is
     // currently working on. Without this pointer, "which run am I in?" would have
     // to be guessed from timestamps, and resuming a paused run would be ambiguous
     // as soon as two runs exist.

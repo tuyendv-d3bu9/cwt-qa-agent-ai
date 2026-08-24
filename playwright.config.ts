@@ -1,7 +1,12 @@
 import { defineConfig } from '@playwright/test';
+// Every path below comes from agents/runtime/paths.js — the same module the agents use, so
+// the test runner and the agents cannot disagree about where anything is. Hardcoding them
+// here is how "the verifier reads a test-results.json nobody writes" happens.
+import * as P from './agents/runtime/paths.js';
 
-// Output path is fixed at memory/working/test-results.json — agents/qa-verifier/index.js
-// reads exactly this path (role.md contract), not the Playwright default location.
+// testDir is .qa-run/tests (GENERATED specs). tests/steps and tests/pages stay outside it
+// on purpose: they are committed, human-reviewed code, not run output, and Playwright must
+// not try to execute a step library as if it were a spec.
 //
 // baseURL is PROJECT DATA, not code (memory/README.md: anything project-specific lives
 // in tier-2 config so the same codebase can serve another project). Resolution order:
@@ -24,17 +29,21 @@ async function resolveBaseUrl(): Promise<string | undefined> {
 const baseURL = await resolveBaseUrl();
 
 export default defineConfig({
-  testDir: './tests',
+  testDir: P.SPEC_DIR,
   fullyParallel: true,
   retries: 0,
   reporter: [
     ['list'],
-    ['json', { outputFile: 'memory/working/test-results.json' }],
+    ['json', { outputFile: P.TEST_RESULTS }],
   ],
   use: {
     baseURL,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
-  outputDir: 'evidence',
+  // Playwright's OWN artifacts (trace.zip, error-context.md, test-failed-*.png), NOT the
+  // before/after screenshots the specs take. This used to be 'evidence', so Playwright
+  // created a per-failure subfolder inside the very directory holding the evidence images
+  // — two writers, one folder, and no way to tell whose file was whose.
+  outputDir: P.ARTIFACTS_DIR,
 });

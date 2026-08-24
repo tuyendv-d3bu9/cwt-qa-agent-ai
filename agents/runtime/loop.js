@@ -6,7 +6,7 @@
 // tool-loop need in this repo (MCP tools from a live listTools() call, not a
 // static declared schema) didn't fit that shape, so it was reinvented ad hoc
 // each time instead (see qa-automation's old inline executeSteps(), and the
-// round-retry loop duplicated twice in flow-2-leader-analyst.js). The two
+// round-retry loop duplicated twice in workflow/leader-analyst.js). The two
 // functions below extract those actual repeated shapes instead.
 
 /**
