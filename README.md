@@ -13,7 +13,7 @@
 - [Cấu hình](#cấu-hình)
 - [Cách chạy](#cách-chạy)
 - [Workflow chi tiết](#workflow-chi-tiết)
-- [Agents](#agents)
+- [Agents](#agents) — 7 node
   - [QA Leader](#qa-leader)
   - [QA Analyst](#qa-analyst)
 - [State & Memory](#state--memory)
@@ -81,7 +81,6 @@ qa-agent-ai/
 │   │   ├── index.js                     # Entry point của Leader
 │   │   ├── role.md                      # Định nghĩa vai trò & giới hạn
 │   │   ├── skills/
-│   │   │   ├── 01_doc_convert_inspect.md
 │   │   │   ├── 02_doc_classification.md
 │   │   │   ├── 03_info_gap_reporting.md
 │   │   │   ├── 04_task_assignment.md
@@ -142,14 +141,15 @@ qa-agent-ai/
 ├── qa.js                                # UI TERMINAL — một lệnh duy nhất cần nhớ. Zero-dep (readline).
 │
 ├── flows/                               # THỨ TỰ LUỒNG NẰM Ở ĐÂY, không nằm trong code
-│   ├── leader-analyst.flow.yml          # type: script — vòng hỏi–đáp đặc thù, giữ là script
-│   └── design-to-report.flow.yml        # khai báo: 4 bước + cửa duyệt + 3 nhánh verdict
+│   ├── full.flow.yml                    # TOÀN BÀI: tài liệu → báo cáo. Một lệnh, chạy lại được
+│   ├── analyze.flow.yml                 # chỉ phân tích — KHÔNG mở trình duyệt (luồng nên chạy đầu tiên)
+│   ├── design.flow.yml                  # tới bảng test case
+│   └── verify.flow.yml                  # đã có test-results.json → kết luận + báo cáo
 │
-├── workflow/
+├── workflow/                            # 4 file: 2 khung chạy + 1 script bước + tài liệu
 │   ├── flow-file.js                     # Đọc + KIỂM TĨNH file luồng (tên node lạ → nổ TRƯỚC khi chạy)
-│   ├── flow-runner.js                   # Bộ điều phối DUY NHẤT cho luồng khai báo
-│   ├── flow-2-leader-analyst.js         # Luồng script: Leader + Analyst
-│   ├── flow-3-…js                       # SHIM gọi flow-runner (giữ lệnh cũ, một đường code)
+│   ├── flow-runner.js                   # KHUNG CHẠY duy nhất cho mọi luồng
+│   ├── leader-analyst.js                # Nửa đầu, gọi bằng một BƯỚC `script:` trong file luồng
 │   └── README.md
 │
 ├── project-docs/                        # 📂 ĐẶT TÀI LIỆU DỰ ÁN VÀO ĐÂY (nguồn thô, hiếm đổi)
@@ -275,8 +275,9 @@ Menu terminal, không cần nhớ lệnh nào khác. Các lệnh con dùng đư�
 | `node qa.js new "<mô tả>"` | **sinh một node mới từ mô tả** (`--dry-run` để xem trước) |
 | `npm run test:unit` | 18 bộ test, không gọi LLM, chạy offline |
 
-Các lệnh cũ vẫn chạy nguyên (`node workflow/flow-2-…`, `node agents/approve.js`) — chúng gọi
-đúng cùng một đường code, không có hành vi nào tồn tại hai bản.
+`node agents/approve.js` và `node agents/supervise.js` vẫn chạy nguyên — chúng gọi đúng cùng
+một đường code với `qa.js`, không có hành vi nào tồn tại hai bản. Hai script điều phối đánh số
+`flow-2`/`flow-3` đã bị bỏ: thứ tự luồng giờ nằm trong `flows/*.flow.yml`.
 
 ### Luồng nằm ở đâu
 
@@ -316,7 +317,11 @@ Hỗ trợ định dạng: `.docx`, `.xlsx`, `.pptx`, `.md`, `.csv`
 ### Bước 2 — Chạy workflow
 
 ```bash
-node workflow/flow-2-leader-analyst.js "Phân tích Feature X - Voucher Checkout"
+# Lần đầu nên chạy luồng này: KHÔNG mở trình duyệt, không gọi MCP
+node qa.js run analyze "Phân tích Feature X - Voucher Checkout"
+
+# Toàn bài (tài liệu → báo cáo) — một lệnh, chạy lại được
+node qa.js run full "Phân tích Feature X - Voucher Checkout" --confirm-mcp
 ```
 
 ### Bước 3 — Xử lý khi cần xác nhận (nếu có gap)
@@ -351,7 +356,7 @@ cat .qa-run/deliverables/progress-report.md
 ## Workflow chi tiết
 
 ```
-[Human] node workflow/flow-2-leader-analyst.js "Task"
+[Human] node qa.js run analyze "Task"
                          │
                          ▼
               ┌──────────────────────┐
@@ -401,6 +406,23 @@ cat .qa-run/deliverables/progress-report.md
 ---
 
 ## Agents
+
+7 node, mỗi node một thư mục `agents/<tên>/`. Xem hợp đồng vào/ra của từng node bằng
+`node qa.js nodes` — đó là **registry thật**, đọc từ `CONTRACT` trong code, nên nó không thể
+lệch khỏi thực tế như một bảng trong README.
+
+| Node | Việc | Vào → Ra |
+|---|---|---|
+| `qa-leader` | Chuẩn hoá + phân loại tài liệu, chưng cất tri thức, hỏi lại chỗ thiếu, giao việc, review theo FACT, giám sát mọi phiên | `project-docs/` → `task-assignment.md` |
+| `qa-analyst` | Requirement Summary, missing rule (06W), viewpoint + test idea | `task-assignment.md` → `deliverable-analyst.md` |
+| `qa-test-designer` | Test case 8 trường, boundary, coverage — Steps bám luồng thật | `+ deliverable-analyst.md` → `deliverable-test-designer.md` |
+| `qa-automation` | Đi luồng bằng MCP, Playwright sinh locator, sinh Page Object + step library + `.feature` → `.spec.ts` | `deliverable-test-designer.md` → `.qa-run/tests/*.spec.ts` |
+| `qa-verifier` | Ghép 2 kênh (assertion + ảnh) → nhãn từng test, verdict PASS/FIX/ASK **deterministic** | `test-results.json` → `deliverable-verifier.md` |
+| `qa-reporter` | 7 loại report (bug, daily, sprint, release, RCA, communication, narrative) | `deliverable-verifier.md` → `.qa-run/reports/` |
+| `qa-architect` | **Sinh một node mới từ mô tả.** LLM viết bản khai; code sinh `index.js`/`CONTRACT`/`role.md` | mô tả → `agents/<tên mới>/` |
+
+Hai node dưới đây được mô tả kỹ vì chúng là phần của bài học; các node còn lại xem `role.md`
+trong thư mục của chúng.
 
 ### QA Leader
 
@@ -475,8 +497,8 @@ npm run models
 # Kiểm tra kết nối API
 node agents/testing.js
 
-# Chạy luồng chính (Leader + Analyst)
-node workflow/flow-2-leader-analyst.js "Tên task của bạn"
+# Chạy luồng (menu: chỉ cần `node qa.js`)
+node qa.js run analyze "Tên task của bạn"
 
 # Xem kết quả phân tích
 cat .qa-run/deliverables/deliverable-analyst.md
@@ -526,14 +548,14 @@ cp .env.example .env
 # Kiểm tra file gap report
 cat .qa-run/deliverables/gap-report.md
 
-# Điền câu trả lời vào file, sau đó chạy lại
-node workflow/flow-2-leader-analyst.js "Task name"
+# Điền câu trả lời vào file, sau đó chạy lại ĐÚNG lệnh cũ
+node qa.js run analyze "Task name"
 ```
 
 **Muốn bắt đầu lại từ đầu**
 ```bash
 rm -rf .qa-run/
-node workflow/flow-2-leader-analyst.js "Task name"
+node qa.js run analyze "Task name" --new-run
 ```
 
 **Cache cũ cho kết quả sai**

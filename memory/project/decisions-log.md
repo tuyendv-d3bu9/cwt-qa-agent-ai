@@ -27,6 +27,28 @@ Cho phép tối đa 2 mã trên 1 đơn: 01 mã giảm đơn hàng + 01 mã free
 
 *Nguồn: `project-docs/06_Communication/CR-005-Mail-thread.md`*
 
+### GAP-001 — Mâu thuẫn phiên bản BRD Khuyến mãi
+**Trạng thái**: Đã xác nhận
+
+**Câu hỏi:** Phiên bản BRD nào (`v1.0` hay `v1.2`) là phiên bản chính thức và cập nhật nhất cần áp dụng cho toàn bộ quá trình kiểm thử?
+
+**Trả lời (người dùng xác nhận 2026-08-23):** Dùng phiên bản: BRD-Promotion-v1.2.md
+
+*Nguồn của vấn đề: `02_BA/BRD-Promotion-v1.0.md` vs `02_BA/BRD-Promotion-v1.2.md`*
+
+*Nguồn: `.qa-run/deliverables/gap-report.md`*
+
+### GAP-002 — Thiếu thông tin đặc tả kỹ thuật và UI cho tính năng Voucher/Checkout
+**Trạng thái**: Đã xác nhận
+
+**Câu hỏi:** Các thay đổi trong CR-005 (nếu có) đã được cập nhật hoàn toàn vào API spec và UI flow hiện tại chưa, hay cần bổ sung thêm chi tiết nào?
+
+**Trả lời (người dùng xác nhận 2026-08-23):** CHưa được đối chiếu. hãy thự xử lý cho tôi.
+
+*Nguồn của vấn đề: `02_BA/BRD-Promotion-v1.2.md` vs `03_DEV/API-spec-voucher-checkout.md` & `06_Communication/CR-005-Mail-thread.md`*
+
+*Nguồn: `.qa-run/deliverables/gap-report.md`*
+
 ## Source
 `project-docs/06_Communication/` (toàn bộ), đối chiếu với `.qa-run/deliverables/gap-report.md` (nếu có câu trả lời).
 

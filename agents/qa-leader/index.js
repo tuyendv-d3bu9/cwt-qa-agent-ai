@@ -1,5 +1,5 @@
 ﻿// agents/qa-leader/index.js
-// Node: QA Leader — coordinator of 6 skills (01-06), does not analyze requirements itself.
+// Node: QA Leader — coordinator of its skills (02..06), does not analyze requirements itself.
 // Leader only does its own steps (setup + review). Orchestration loop lives in the workflow.
 
 // node:fs is used ONLY to load this node's own static role/knowledge/skill files at
@@ -8,6 +8,7 @@
 import { readFile } from "node:fs/promises";
 import { runTool } from "../runtime/tools.js";
 import { callLLM } from "../runtime/llm.js";
+import { runAgentLoop } from "../runtime/agent-loop.js";
 import { convertDirectory } from "./tools/convert-to-md.js";
 import { hashProjectDocsPerFile, diffManifest } from "./tools/project-docs-hash.js";
 import { storeKnowledgeSection, flagKnowledgeFromRemovedSource } from "./tools/project-knowledge-store.js";
@@ -16,7 +17,9 @@ import { computeImpact, renderImpactReport } from "./tools/impact-analysis.js";
 import { listRuns, stepsOfRun } from "../runtime/memory.js";
 import { superviseRuns, renderDashboard } from "./tools/run-supervisor.js";
 import { parseUiFlows } from "./tools/ui-flow-parser.js";
+import { checkGapReportFormat } from "./tools/gap-report-check.js";
 import { createHash } from "node:crypto";
+import { skillDocsText } from "../runtime/skill-docs.js";
 import * as P from "../runtime/paths.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
@@ -33,9 +36,19 @@ async function loadSkill(fileName) {
     return readFile(new URL(fileName, SKILLS_DIR), "utf8");
 }
 
+// `skillDocsText` nạp mọi tài liệu mà CHÍNH skill đó nói là nó dùng, suy ra từ văn bản skill.
+// Ở node này nó bù đúng một chỗ hụt: `02b_project_knowledge_distillation.md` nhắc
+// `memory/semantic/testing-conventions.md` mà askLLM chưa bao giờ nạp file đó — prompt chỉ
+// model tới một quy ước nó không đọc được. Cùng loại lỗi đã ghi ở dòng 23–25 phía trên.
+async function systemFor(skillText, extraKnowledge = "") {
+    const base = [ROLE, extraKnowledge].filter(Boolean);
+    const refs = await skillDocsText(skillText, { agentDir: "agents/qa-leader", already: base });
+    return [...base, refs.text, skillText].filter(Boolean).join("\n\n");
+}
+
 async function askLLM(skillText, userText, extraKnowledge = "") {
     const res = await callLLM({
-        system: [ROLE, extraKnowledge, skillText].filter(Boolean).join("\n\n"),
+        system: await systemFor(skillText, extraKnowledge),
         contents: [{ role: "user", parts: [{ text: userText }] }],
     });
     return res.text;
@@ -344,12 +357,40 @@ async function step2b_updateProjectKnowledge() {
 }
 
 // Step 3 (skill 03) — cross-check, detect gaps/contradictions
+/**
+ * Gate for step 3's output (P11). Deterministic, no LLM.
+ *
+ * Two layers: the JSON envelope here, the gap-report FORMAT in
+ * `tools/gap-report-check.js` (which is where it can be tested without an LLM).
+ */
+function checkGapReport(raw) {
+    const parsed = parseJSON(raw, "step3_gapCheck (gate định dạng)");
+    if (!parsed || typeof parsed.hasGap !== "boolean") {
+        return { ok: false, issues: [`Phải trả về JSON {"hasGap": bool, "reportMarkdown": string}.`] };
+    }
+    // hasGap=false: không có câu hỏi nào thì không có gì phải định dạng.
+    if (parsed.hasGap === false) return { ok: true, issues: [] };
+    return checkGapReportFormat(parsed.reportMarkdown);
+}
+
 async function step3_gapCheck() {
     const skill = await loadSkill("03_info_gap_reporting.md");
     const listing = await runTool("list_files", { dir: "project-docs" });
-    const raw = await askLLM(skill,
+    const userText =
         `classified_documents=${JSON.stringify(listing.files.map(f => f.path))}\n` +
-        `Return ONLY a raw JSON object (no markdown, no code block): {"hasGap": bool, "reportMarkdown": string}`);
+        `Return ONLY a raw JSON object (no markdown, no code block): {"hasGap": bool, "reportMarkdown": string}`;
+
+    const loop = await runAgentLoop({
+        system: await systemFor(skill),
+        task: userText,
+        label: "gap-check",
+        maxRevisions: 2,
+        selfCheck: (text) => checkGapReport(text),
+    });
+    if (!loop.ok) {
+        console.warn(`  [qa-leader/gap-check] CHƯA ĐẠT (${loop.exhausted}) — ${loop.issues.join(" ")}`);
+    }
+    const raw = loop.text;
     const parsed = parseJSON(raw, "step3_gapCheck (rà soát mâu thuẫn tài liệu)");
     if (!parsed || typeof parsed.hasGap !== "boolean") {
         // Unreadable gap check => treat as A GAP, never as "tài liệu nhất quán".
@@ -370,7 +411,7 @@ async function step3_gapCheck() {
     return parsed;
 }
 
-// Step 4 (skill 04) — Generate task assignment, write to memory/working/task-assignment.md
+// Step 4 (skill 04) — Generate task assignment, write to P.TASK_ASSIGNMENT
 async function step4_assignTask(task) {
     const skill = await loadSkill("04_task_assignment.md");
     const listing = await runTool("list_files", { dir: "project-docs" });

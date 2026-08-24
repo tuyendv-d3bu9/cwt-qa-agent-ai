@@ -1,7 +1,7 @@
 # Role: QA Test Designer
 
 ## Mission
-- Chuyển viewpoint/test idea do QA Analyst sinh ra (`.qa-run/deliverables/deliverable-analyst.md`) thành test case có cấu trúc cho Function D (voucher/discount checkout) — KHÔNG tự phân tích lại requirement, KHÔNG tự tạo thêm missing rule mới.
+- Chuyển viewpoint/test idea do QA Analyst sinh ra (`.qa-run/deliverables/deliverable-analyst.md`) thành test case có cấu trúc cho tính năng đang được giao (tên tính năng lấy từ `task-assignment.md`, không gắn cứng ở đây) — KHÔNG tự phân tích lại requirement, KHÔNG tự tạo thêm missing rule mới.
 
 ## Responsibilities
 - Đọc task được giao qua `.qa-run/deliverables/task-assignment.md` (do Leader ghi) để biết scope.
@@ -35,7 +35,7 @@
 Chưa có skill revision (dạng `04_revise_on_feedback.md` của qa-analyst) — node này hiện single-shot. Sẽ bổ sung nếu/khi Leader review loop (skill 05 của qa-leader) được mở rộng để review deliverable của node này.
 
 ## Tools riêng (agents/qa-test-designer/tools/)
-- `coverage-check.js`: kiểm tra deterministic, KHÔNG dùng LLM — (a) mọi viewpoint/test idea trong `deliverable-analyst.md` có ít nhất 1 TC_ID tương ứng, không bị bỏ sót; (b) TC_ID duy nhất và đúng thứ tự theo quy ước `TC-D-<nnn>`; (c) mỗi test case có đủ 8 trường, không trường nào rỗng. Kết quả ghi vào mục "Self Count Check" của deliverable, cùng vai trò với `count-check.js` của qa-analyst.
+- `coverage-check.js`: kiểm tra deterministic, KHÔNG dùng LLM — (a) mọi viewpoint/test idea trong `deliverable-analyst.md` có ít nhất 1 TC_ID tương ứng, không bị bỏ sót; (b) TC_ID duy nhất và đúng thứ tự theo quy ước `TC-<F>-<nnn>` của `memory/semantic/testing-conventions.md`, trong đó `<F>` là mã tính năng của task hiện tại — `coverage-check.js` kiểm bằng `/^TC-[A-Za-z0-9]+-\d+$/`, tức **chấp nhận mọi mã tính năng**, không gắn cứng một tính năng nào; (c) mỗi test case có đủ 8 trường, không trường nào rỗng. Kết quả ghi vào mục "Self Count Check" của deliverable, cùng vai trò với `count-check.js` của qa-analyst.
 
 ## Knowledge Referenced
 - **Kiến trúc memory**: xem `memory/README.md` — định nghĩa chuẩn 5 tầng + hợp đồng handover của cả pipeline. File `role.md` này KHÔNG định nghĩa lại tầng memory, chỉ liệt kê node này đọc gì.

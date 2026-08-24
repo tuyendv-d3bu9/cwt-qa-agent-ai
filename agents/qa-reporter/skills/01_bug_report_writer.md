@@ -47,7 +47,7 @@ Trạng thái: DRAFT — chờ xác nhận con người trước khi coi là bug
 |---|---|
 | Title | [CẦN BỔ SUNG: chưa đủ căn cứ đặt tên lỗi cụ thể] |
 | Environment | <URL môi trường test từ cấu hình tầng 2>, Chromium qua MCP Playwright (headless) |
-| Evidence | `evidence/TC-D-004-after.jpg` |
+| Evidence | `.qa-run/evidence/TC-D-004-after.jpg` |
 | Steps to Reproduce | 1. Vào checkout 2. Nhập mã SALE20 3. Bấm Áp dụng |
 | Actual Result | Không tìm thấy ô nhập mã lúc chạy test, dù ui-conventions.md ghi nhận ô này tồn tại nhất quán — [CẦN BỔ SUNG: cần chạy lại để xác nhận có phải lỗi tạm thời] |
 | Expected Result | Áp mã thành công |

@@ -7,15 +7,16 @@
 //
 // Đây là ranh giới cố ý. Một "mini-language" đủ mạnh để diễn đạt mọi thứ sẽ phức tạp hơn
 // chính cái script nó thay thế — lúc đó ta chỉ đổi JS thành một thứ tệ hơn JS. Nên: mỗi
-// nguyên thuỷ dưới đây tương ứng MỘT hành vi đã có thật trong `flow-3`, không có nguyên
-// thuỷ nào thêm "cho tổng quát".
+// nguyên thuỷ dưới đây tương ứng MỘT hành vi đã có thật trong hai script điều phối cũ, không
+// có nguyên thuỷ nào thêm "cho tổng quát".
 //
-// Luồng nào KHÔNG diễn đạt nổi bằng những nguyên thuỷ này thì cứ để là script và khai
-// `type: script` (như `flow-2`: vòng hỏi–đáp gap-report của nó thật sự đặc thù). Bẻ một
-// script đặc thù vào khuôn khai báo bằng mọi giá là cách chắc chắn nhất để có một khuôn
-// khai báo không ai hiểu.
+// Luồng nào KHÔNG diễn đạt nổi bằng những nguyên thuỷ này thì cứ để nguyên là một script và
+// gọi nó bằng một BƯỚC `script:` (như `leader-analyst.js`: vòng hỏi–đáp gap-report theo từng
+// câu và vòng review `FIX` đi lại cùng node thật sự đặc thù). Bẻ một script đặc thù vào khuôn
+// khai báo bằng mọi giá là cách chắc chắn nhất để có một khuôn khai báo không ai hiểu.
 
 import { readdir, readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { resolve, basename } from "node:path";
 import { parseYamlLite } from "../agents/runtime/yaml-lite.js";
 import * as PATHS from "../agents/runtime/paths.js";
@@ -29,7 +30,12 @@ const BRANCH_ACTIONS = new Set(["continue", "stop", "rework"]);
 const STEP_KEYS = new Set([
     "node", "label", "gate", "require_step", "with", "confirm_flag", "confirm_reason",
     "delete_stale", "wait_for_file", "wait_for_hint", "branch_on", "branch", "rerun_if_rework",
+    // Bước dạng SCRIPT (Q1.1) — cho phép một luồng khai báo chứa một script đặc thù.
+    "script", "args", "pass_flags", "expect_step",
 ]);
+
+/** Key chỉ có nghĩa với bước dạng node. Khai trên bước script là gõ sai, không phải tuỳ chọn. */
+const NODE_ONLY_KEYS = ["with", "confirm_flag", "confirm_reason", "delete_stale", "branch_on", "branch"];
 
 const FLOW_KEYS = new Set([
     "name", "title", "description", "type", "script", "command", "requires_run",
@@ -98,7 +104,21 @@ export function parseFlowFile(text, { file = "(flow)" } = {}) {
         if (!["string", "list", "boolean", "number"].includes(kind)) {
             problems.push(`${file}: \`params.${p.name}.kind\` = "${kind}" không hợp lệ (string|list|boolean|number).`);
         }
-        flow.params.push({ name: String(p.name), kind, default: p.default ?? null, note: p.note ?? null });
+        flow.params.push({
+            name: String(p.name),
+            kind,
+            default: p.default ?? null,
+            note: p.note ?? null,
+            // `positional: true` cho phép gõ `node qa.js run analyze "Phân tích voucher"` thay vì
+            // `--task="Phân tích voucher"`. Người dùng đích của hệ thống này là QA Manual, không
+            // phải lập trình viên — bắt họ gõ `--task=` là thêm một rào cản không đổi lấy gì.
+            positional: p.positional === true,
+        });
+    }
+    const positionals = flow.params.filter(p => p.positional);
+    if (positionals.length > 1) {
+        // Hai param vị trí thì không có cách nào biết đối số nào thuộc param nào.
+        problems.push(`${file}: có ${positionals.length} param khai \`positional: true\` (${positionals.map(p => p.name).join(", ")}) — chỉ được một.`);
     }
 
     const steps = toList(doc.steps);
@@ -113,11 +133,66 @@ export function parseFlowFile(text, { file = "(flow)" } = {}) {
         for (const key of Object.keys(raw)) {
             if (!STEP_KEYS.has(key)) problems.push(`${at}: key lạ "${key}". Cho phép: ${[...STEP_KEYS].join(", ")}.`);
         }
-        if (!raw.node) { problems.push(`${at}: thiếu \`node:\`.`); return; }
+        // Một bước là NODE hoặc SCRIPT, không phải cả hai và không phải không có gì.
+        if (!raw.node && !raw.script) { problems.push(`${at}: thiếu \`node:\` (hoặc \`script:\`).`); return; }
+        if (raw.node && raw.script) {
+            problems.push(`${at}: khai cả \`node:\` và \`script:\` — một bước chỉ là một trong hai.`);
+            return;
+        }
+
+        // ── Bước dạng SCRIPT ────────────────────────────────────────────
+        //
+        // VÌ SAO CẦN LOẠI BƯỚC NÀY. `leader-analyst` không diễn đạt được bằng khai báo (vòng
+        // hỏi–đáp theo TỪNG CÂU + vòng review `FIX` đi lại cùng node). Nhưng nếu nó chỉ tồn tại
+        // như một luồng riêng thì KHÔNG có luồng nào chạy hết từ tài liệu tới báo cáo, và người
+        // dùng phải học 2 lệnh rời. Cho một script làm MỘT BƯỚC là cách nối hai nửa mà không
+        // phải bẻ script đặc thù vào khuôn khai báo.
+        if (raw.script) {
+            for (const key of NODE_ONLY_KEYS) {
+                if (raw[key] !== undefined) problems.push(`${at}: \`${key}\` chỉ dùng cho bước \`node:\`, không dùng cho bước \`script:\`.`);
+            }
+            if (!raw.expect_step) {
+                // Đây là ràng buộc quan trọng nhất của loại bước này. Script dừng có chủ ý (chờ
+                // người điền gap-report) cũng thoát 0, y như khi nó chạy xong — nên KHÔNG được
+                // tin mã thoát. `expect_step` là cách runner biết "xong thật" hay "đang chờ
+                // người". Thiếu nó, luồng sẽ chạy bước sau trong khi nửa đầu còn đang chờ.
+                problems.push(
+                    `${at}: bước \`script:\` PHẢI có \`expect_step:\` — script dừng-chờ-người và ` +
+                    `script chạy-xong đều thoát 0, nên runner phải kiểm trạng thái bước trong DB, không tin mã thoát.`
+                );
+            }
+            flow.steps.push({
+                index: i,
+                kind: "script",
+                node: null,
+                script: String(raw.script),
+                label: raw.label ?? String(raw.script),
+                gate: raw.gate ?? null,
+                requireStep: raw.require_step ?? null,
+                expectStep: raw.expect_step ? String(raw.expect_step) : null,
+                args: toList(raw.args).map(String),
+                passFlags: toList(raw.pass_flags).map(String),
+                rerunIfRework: raw.rerun_if_rework ?? true,
+                with: {},
+                deleteStale: [],
+                waitForFile: raw.wait_for_file ?? null,
+                waitForHint: raw.wait_for_hint ?? null,
+                confirmFlag: null,
+                confirmReason: null,
+                branchOn: null,
+                branch: [],
+            });
+            return;
+        }
 
         const step = {
             index: i,
+            kind: "node",
             node: String(raw.node),
+            script: null,
+            expectStep: null,
+            args: [],
+            passFlags: [],
             label: raw.label ?? String(raw.node),
             gate: raw.gate ?? null,
             requireStep: raw.require_step ?? null,
@@ -199,7 +274,7 @@ function toList(v) {
  * luồng trước hoặc người/CI). Gộp hai loại này lại là cách nhanh nhất khiến người ta bỏ
  * qua cả danh sách.
  */
-export function validateFlow(flow, { nodes, paths = PATHS } = {}) {
+export function validateFlow(flow, { nodes, paths = PATHS, fileExists = existsSync, root = process.cwd() } = {}) {
     const problems = [];
     const external = [];
     if (!flow || flow.type === "script") return { problems, external };
@@ -207,6 +282,36 @@ export function validateFlow(flow, { nodes, paths = PATHS } = {}) {
     const producedSoFar = new Set();
 
     for (const step of flow.steps) {
+        if (step.kind === "script") {
+            const at = `${flow.file}: bước ${step.index + 1} (script ${step.script})`;
+            // Tên file gõ sai = luồng chết giữa đường, sau khi các bước trước đã tốn LLM call.
+            // Bắt ở đây, cùng chỗ bắt tên node gõ sai.
+            if (!fileExists(resolve(root, step.script))) {
+                problems.push(`${at}: không có file này.`);
+            }
+            if (step.expectStep && !nodes?.get?.(step.expectStep)) {
+                problems.push(`${at}: \`expect_step: ${step.expectStep}\` — không có node nào tên đó.`);
+            }
+            if (step.gate && !nodes?.get?.(step.gate)) {
+                problems.push(`${at}: \`gate: ${step.gate}\` — không có node nào tên đó.`);
+            }
+            for (const a of step.args) {
+                const ref = refOf(a);
+                if (ref?.kind === "param" && !flow.params.some(p => p.name === ref.name)) {
+                    problems.push(`${at}: \`args\` dùng $param.${ref.name} nhưng luồng không khai param đó.`);
+                }
+                if (ref?.kind === "flag" && !flow.flags.some(f => f.name === ref.name)) {
+                    problems.push(`${at}: \`args\` dùng $flag.${ref.name} nhưng luồng không khai flag đó.`);
+                }
+            }
+            for (const name of step.passFlags) {
+                if (!flow.flags.some(f => f.name === name)) {
+                    problems.push(`${at}: \`pass_flags\` có "${name}" nhưng luồng không khai flag đó ở \`flags:\`.`);
+                }
+            }
+            continue;
+        }
+
         const at = `${flow.file}: bước ${step.index + 1} (${step.node})`;
         const node = nodes?.get?.(step.node);
         if (!node) {
@@ -288,8 +393,22 @@ export function parseArgs(flow, argv) {
     for (const f of flow.flags) flags[f.name] = false;
     for (const p of flow.params) params[p.name] = castParam(p, p.default);
 
+    const positional = flow.params.find(p => p.positional);
+    let positionalTaken = false;
+
     for (const arg of argv) {
-        if (!arg.startsWith("--")) { unknown.push(arg); continue; }
+        if (!arg.startsWith("--")) {
+            // Đối số không có `--`: gán cho param vị trí nếu luồng khai một cái. Đối số vị trí
+            // THỨ HAI vẫn vào `unknown` — im lặng bỏ qua nó nghĩa là người dùng gõ hai chuỗi và
+            // một chuỗi biến mất không ai báo.
+            if (positional && !positionalTaken) {
+                params[positional.name] = castParam(positional, arg);
+                positionalTaken = true;
+                continue;
+            }
+            unknown.push(arg);
+            continue;
+        }
         const body = arg.slice(2);
         const eq = body.indexOf("=");
         const name = eq === -1 ? body : body.slice(0, eq);
@@ -365,6 +484,10 @@ export function renderFlow(flow, { nodes } = {}) {
         if (s.confirmFlag) bits.push(`cần --${s.confirmFlag}`);
         if (s.waitForFile) bits.push(`chờ file ${s.waitForFile}`);
         if (s.branchOn) bits.push(`rẽ theo ${s.branchOn}: ` + s.branch.map(b => `${b.value}→${b.action}`).join(" · "));
+        if (s.kind === "script") {
+            out.push(`  ${i + 1}. ${s.label}   (script → ${s.expectStep}${bits.length ? " · " + bits.join(" · ") : ""})`);
+            return;
+        }
         const missing = nodes && !nodes.get?.(s.node) ? "  [KHÔNG CÓ NODE NÀY]" : "";
         out.push(`  ${i + 1}. ${s.node}${missing}${bits.length ? `   (${bits.join(" · ")})` : ""}`);
     });

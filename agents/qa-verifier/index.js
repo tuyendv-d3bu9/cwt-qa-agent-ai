@@ -12,9 +12,11 @@
 import { readFile } from "node:fs/promises";
 import { runTool } from "../runtime/tools.js";
 import { callLLM, callVisionLLM } from "../runtime/llm.js";
+import { runAgentLoop } from "../runtime/agent-loop.js";
 import { markStep } from "../runtime/memory.js";
 import { parseTestResults, groupByTcId } from "./tools/parse-test-results.js";
 import { combine, deriveVerdict, selectForVision, LABELS } from "./tools/verdict-combiner.js";
+import { checkNarrative } from "./tools/narrative-check.js";
 import * as P from "../runtime/paths.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
@@ -33,9 +35,11 @@ async function loadSkill(fileName) {
     return readFile(new URL(fileName, SKILLS_DIR), "utf8");
 }
 
+const systemFor = (skillText) =>
+    [ROLE, FACT, VERDICT_MAPPING, UI_BASELINE_RULE, ORACLE_BOUNDARY, CHECKPOINT, RISK_TAXONOMY, skillText].join("\n\n");
+
 async function askLLM(skillText, userText) {
-    const system = [ROLE, FACT, VERDICT_MAPPING, UI_BASELINE_RULE, ORACLE_BOUNDARY, CHECKPOINT, RISK_TAXONOMY, skillText].join("\n\n");
-    const res = await callLLM({ system, contents: [{ role: "user", parts: [{ text: userText }] }] });
+    const res = await callLLM({ system: systemFor(skillText), contents: [{ role: "user", parts: [{ text: userText }] }] });
     return res.text;
 }
 
@@ -204,7 +208,13 @@ export async function run({ testResultsFile, uiConventionsFile, testCaseFile, vl
 
     // The LLM writes the explanation only. The verdict is already fixed above, so a
     // differently-worded report cannot change what the workflow does next.
-    const narrative = await askLLM(await loadSkill("02_verdict_writer.md"),
+    //
+    // AND THAT RULE IS NOW ENFORCED (P11). role.md has always declared "skill 02 chỉ diễn
+    // giải verdict đã tính, KHÔNG được đổi" — but nothing checked it, so the rule lived only
+    // in a prompt asking politely. `checkNarrative()` is deterministic and its failure is fed
+    // back, so the model revises instead of shipping a report that contradicts the verdict or
+    // quietly omits a test a person has to look at.
+    const narrativeUser =
         `verdict_deterministic=${verdict}\n` +
         `labelled_results=${JSON.stringify(analysed.map(({ visual, ...rest }) => ({
             ...rest,
@@ -212,7 +222,22 @@ export async function run({ testResultsFile, uiConventionsFile, testCaseFile, vl
                 ? { matches_expected: visual.matches_expected, mismatch_details: visual.mismatch_details, ui_anomalies: visual.ui_anomalies, confidence: visual.confidence }
                 : null,
         })))}\n` +
-        `KHÔNG được đổi verdict — chỉ diễn giải verdict đã cho.`);
+        `KHÔNG được đổi verdict — chỉ diễn giải verdict đã cho.`;
+
+    const narrativeOut = await runAgentLoop({
+        system: systemFor(await loadSkill("02_verdict_writer.md")),
+        task: narrativeUser,
+        label: "verdict-writer",
+        maxRevisions: 2,
+        selfCheck: (text) => {
+            const c = checkNarrative(text, { verdict, analysed });
+            return { ok: c.ok, issues: c.issues };
+        },
+    });
+    if (!narrativeOut.ok) {
+        console.warn(`  [qa-verifier/verdict-writer] CHƯA ĐẠT (${narrativeOut.exhausted}) — ${narrativeOut.issues.join(" ")}`);
+    }
+    const narrative = narrativeOut.text;
 
     await runTool("write_file", {
         path: DELIVERABLE_FILE,

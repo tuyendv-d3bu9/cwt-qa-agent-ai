@@ -1,10 +1,10 @@
 // workflow/flow-runner.js
 // Chạy một luồng KHAI BÁO (`flows/*.flow.yml`). Đây là bộ điều phối DUY NHẤT.
 //
-// VÌ SAO CHỈ CÓ MỘT. `workflow/flow-3-*.js` trước đây tự điều phối; giờ nó là shim gọi hàm
-// này với `flows/design-to-report.flow.yml`. Giữ song song hai đường (một script cũ + một
-// runner mới) là đúng tội "0-BUG" trong TODO.update2.md: code mới có test xanh, còn đường
-// chạy thật vẫn là code cũ, và không ai biết mình đang chạy đường nào.
+// VÌ SAO CHỈ CÓ MỘT. Trước đây có hai script tự điều phối (`flow-2-*.js`, `flow-3-*.js`),
+// mỗi cái tự viết lại thứ tự, cửa duyệt và điều kiện dừng của riêng nó. Cả hai đã bị bỏ:
+// giữ song song hai đường cho cùng một việc là đúng tội "0-BUG" trong TODO.update2.md —
+// code mới có test xanh, đường chạy thật vẫn là code cũ, không ai biết mình đang chạy đường nào.
 //
 // TRÁCH NHIỆM. Runner biết về: thứ tự · cửa duyệt · điều kiện dừng · hợp đồng vào/ra ·
 // trạng thái phiên. Runner KHÔNG biết node nào làm gì — nó gọi qua `CONTRACT` + registry.
@@ -20,8 +20,24 @@ import { initDatabases } from "../agents/runtime/db.js";
 import { getConfig } from "../agents/runtime/knowledge.js";
 import { requireInputs, verifyProduced } from "../agents/runtime/handover.js";
 import { discoverNodes, resolveArgs, callNode, classifyStatus } from "../agents/runtime/node-registry.js";
-import { validateFlow, resolveWith, parseArgs } from "./flow-file.js";
+import { validateFlow, resolveWith, parseArgs, refOf } from "./flow-file.js";
 import * as PATHS from "../agents/runtime/paths.js";
+import { spawn } from "node:child_process";
+
+/**
+ * Chạy một script bước bằng TIẾN TRÌNH CON, không `import`.
+ *
+ * Các script bước gọi `process.exit()` ở nhiều nhánh (chờ người, thiếu tài liệu, hết vòng
+ * review). Import vào đây là để nó giết luôn cả runner — và nếu runner được `qa.js` gọi thì
+ * giết cả UI. `qa.js` cũng spawn vì đúng lý do này.
+ */
+function spawnScript(script, args) {
+    return new Promise((resolve) => {
+        const child = spawn(process.execPath, [script, ...args], { stdio: "inherit" });
+        child.on("exit", (code) => resolve(code ?? 0));
+        child.on("error", (err) => { console.error(`Không chạy được ${script}: ${err.message}`); resolve(1); });
+    });
+}
 
 /**
  * Tên cờ theo QUY ƯỚC mà runner tự đọc, không phải luồng nào cũng phải khai lại logic:
@@ -81,28 +97,39 @@ export async function runFlow(flow, { argv = [], log = console.log, error = cons
             return result({
                 ok: false,
                 reason: `Chưa có phiên nào đang mở. Luồng "${flow.name}" tiếp tục một phiên có sẵn, không tự mở phiên mới.\n` +
-                    `  Mở phiên: node workflow/flow-2-leader-analyst.js "<tên task>"`,
+                    `  Mở phiên: node qa.js run analyze "<tên task>"`,
             });
         }
         log(`Run: ${run.run_id}  (feature: "${run.feature ?? "chưa gán"}")  [${run.status}]` +
             (noGate ? `  — CỬA DUYỆT NGƯỜI ĐANG TẮT (--no-gate)` : ""));
     }
 
-    const state = await loadState();
-    const stepStatus = (agent) => state.steps.find(s => s.agent === agent);
     const steps = [];
     const total = flow.steps.length;
 
     for (const step of flow.steps) {
         const n = `[${step.index + 1}/${total}]`;
-        const node = nodes.get(step.node);
+        const node = step.kind === "script" ? null : nodes.get(step.node);
+
+        // Đọc LẠI trạng thái mỗi bước, không đọc một lần ở đầu vòng.
+        //
+        // LỖI TIỀM ẨN ĐÃ CÓ TRƯỚC Q1.1: bản trước load `state` một lần rồi dùng cho cả vòng.
+        // Khi các bước hoàn thành trong CÙNG một lần chạy, `require_step` vẫn đọc ảnh chụp cũ
+        // và kết luận bước trước "chưa chạy". Chưa nổ vì chưa có luồng nào có 2 bước phụ thuộc
+        // nhau hoàn thành trong một lượt — `full` (Q1.2) là luồng đầu tiên như thế: script hoàn
+        // thành `qa-analyst`, rồi bước sau `require_step: qa-analyst`.
+        const state = await loadState();
+        const stepStatus = (agent) => state.steps.find(s => s.agent === agent);
 
         // ── Đã xong rồi thì bỏ qua: cho phép chạy lại lệnh y nguyên để TIẾP TỤC ──
-        const existing = stepStatus(step.node);
+        // Với bước script thì "đã xong" đo bằng `expect_step`, vì script không phải một node
+        // nên nó không có dòng trạng thái riêng trong `run_steps`.
+        const trackedAgent = step.kind === "script" ? step.expectStep : step.node;
+        const existing = stepStatus(trackedAgent);
         const needsRerun = existing?.status === "needs_rework" && step.rerunIfRework;
         if (existing?.status === "done" && !needsRerun) {
-            log(`${n} ${step.node} đã xong — bỏ qua.`);
-            steps.push({ node: step.node, action: "skipped" });
+            log(`${n} ${step.label} đã xong — bỏ qua.`);
+            steps.push({ node: trackedAgent, action: "skipped" });
             continue;
         }
 
@@ -134,6 +161,45 @@ export async function runFlow(flow, { argv = [], log = console.log, error = cons
                     });
                 }
             }
+        }
+
+        // ── Bước dạng SCRIPT: chạy tiến trình con, rồi KIỂM TRẠNG THÁI, không tin mã thoát ──
+        if (step.kind === "script") {
+            const scriptArgv = [
+                ...step.args.map(a => {
+                    const ref = refOf(a);
+                    if (!ref) return a;
+                    return ref.kind === "flag" ? String(Boolean(flags[ref.name])) : String(params[ref.name] ?? "");
+                }).filter(a => a !== ""),
+                ...step.passFlags.filter(name => flags[name]).map(name => `--${name}`),
+            ];
+
+            log(`${n} Đang chạy ${step.label}…`);
+            log(`     node ${step.script} ${scriptArgv.map(a => (a.includes(" ") ? `"${a}"` : a)).join(" ")}`);
+
+            const code = await spawnScript(step.script, scriptArgv);
+            if (code !== 0) {
+                return result({ ok: false, steps, reason: `${step.script} thoát với mã ${code}. Xem log phía trên.` });
+            }
+
+            // Mã thoát 0 KHÔNG có nghĩa là xong: script cũng thoát 0 khi nó dừng có chủ ý để
+            // chờ người (điền gap-report, duyệt bước). Nguồn sự thật là trạng thái trong DB.
+            const after = await loadState();
+            const tracked = after.steps.find(s => s.agent === step.expectStep);
+            if (tracked?.status !== "done") {
+                return result({
+                    stopped: true, steps,
+                    reason: `Nửa này chưa xong — "${step.expectStep}" đang ở trạng thái ` +
+                        `${tracked?.status ?? "chưa chạy"}.\n` +
+                        `  Làm theo hướng dẫn script vừa in ở trên, rồi chạy lại đúng lệnh này để tiếp tục.`,
+                });
+            }
+
+            steps.push({ node: step.expectStep, action: "done", output: tracked.output ?? null });
+            if (!noGate && flow.steps.some(s => s.gate === step.expectStep)) {
+                log(`     Cần duyệt trước khi đi tiếp: đọc ${tracked.output} rồi chạy  node qa.js approve ${step.expectStep} "<tên bạn>"`);
+            }
+            continue;
         }
 
         // ── Hành động ra ngoài thật: phải xác nhận TƯỜNG MINH, mỗi lần ──

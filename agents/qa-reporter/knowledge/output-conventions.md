@@ -5,7 +5,7 @@ Convention
 
 ## Content
 
-`.qa-run/reports/` (thư mục mới ở gốc repo, KHÔNG bị xóa như `memory/working/`) chứa mọi deliverable hoàn chỉnh của qa-reporter — báo cáo thật cần giữ lại, không phải scratch state của pipeline.
+`.qa-run/reports/` chứa mọi deliverable hoàn chỉnh của qa-reporter — báo cáo thật cần giữ lại, không phải scratch state của pipeline. Mọi đường dẫn lấy từ `agents/runtime/paths.js`, không viết cứng ở đây.
 
 ### Đường dẫn theo từng loại report
 | Loại report | Đường dẫn |
@@ -20,7 +20,7 @@ Convention
 | Sprint history (dữ liệu trend) | `.qa-run/reports/sprint-history.json` |
 
 ### Rule
-- `.qa-run/reports/` KHÔNG nằm trong quy ước "xóa để chạy lại" của `memory/working/` (xem README.md) — mỗi lần chạy GHI ĐÈ đúng file tương ứng với loại report vừa chạy; các report khác không bị đụng tới.
+- `.qa-run/` là **sản phẩm của một lần chạy** và xoá được tự do (xem README.md, mục 3 ranh giới). Trong đó `reports/` mỗi lần chạy GHI ĐÈ đúng file tương ứng với loại report vừa chạy; các report khác không bị đụng tới.
 - `.qa-run/deliverables/deliverable-reporter.md` vẫn tồn tại song song — đó là bản ghi nội bộ pipeline (Self Count Check) để Leader/pipeline kiểm tra, KHÔNG phải bản báo cáo cho người đọc cuối. Không nhầm lẫn 2 vai trò này.
 
 ## Source

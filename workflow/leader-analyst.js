@@ -1,15 +1,24 @@
-// workflow/flow-2-leader-analyst.js
-// Flow 2: QA Leader + QA Analyst
+// workflow/leader-analyst.js
+// Nửa đầu pipeline: QA Leader + QA Analyst.
+//
+// Là SCRIPT, không phải node — có chủ ý. Nửa này có vòng hỏi–đáp theo TỪNG CÂU (gap-report có
+// ô trả lời cho mỗi GAP-nnn; lần chạy sau chỉ nhắc câu còn trống, câu đã trả lời thì xác nhận
+// lại và ghi vào decisions-log) cùng vòng review leader↔analyst trong đó FIX là ĐI LẠI cùng
+// node. File luồng khai báo không diễn đạt được hai thứ đó.
+//
+// Các luồng trong `flows/` gọi file này bằng một BƯỚC `script:`, nên nó vẫn nằm trong luồng
+// trọn vẹn thay vì là một lệnh rời người dùng phải nhớ.
 // Workflow is the orchestrator — it calls each agent node in sequence.
 // Agents do NOT call each other.
 //
-// This flow OPENS the run (session) that flow-3 later continues: it is the entry point
+// This script OPENS the run (session) that the rest of the pipeline continues: entry point
 // of the pipeline, so "phiên hiện tại" starts here. Re-running it with the same feature
 // continues the same run; a different feature opens a new one (--new-run forces a new
 // run even for the same feature). See agents/runtime/memory.js.
 //
 // Run:
-//   node workflow/flow-2-leader-analyst.js "Task name to analyze" [--new-run]
+//   node qa.js run analyze "Tên task" [--new-run]           <- cách dùng bình thường
+//   node workflow/leader-analyst.js "Tên task" [--new-run]   <- runner gọi thế này (bước `script:`)
 
 // readFile/writeFile are used here only on the two hard-coded constants below
 // (TASK_FILE, GAP_FILE) — no path here derives from LLM output, so the safe()
@@ -264,19 +273,25 @@ const result = await runRoundLoop({
 });
 
 if (result.verdict === "ASK") {
-    console.log(`\n>> Leader needs clarification. Open ${GAP_FILE}, answer the questions, then run this command again.`);
-    process.exit(0);
-}
-
-if (result.verdict === "PASS") {
     console.log(
-        `\n>> Done after ${result.round} round(s). Check memory/working/deliverable-analyst.md\n` +
-        `   Cửa duyệt người: flow-3 sẽ CHẶN cho tới khi bạn đọc file trên rồi chạy\n` +
-        `   node agents/approve.js qa-analyst "<tên bạn>"\n` +
-        `   (bỏ cửa khi demo nhanh: flow-3 ... --no-gate)\n`
+        `\n>> Leader cần bạn làm rõ thêm. Mở ${GAP_FILE}, trả lời từng câu, lưu lại,\n` +
+        `   rồi chạy lại ĐÚNG lệnh vừa rồi.\n`
     );
     process.exit(0);
 }
 
-console.error(`\n>> Exceeded ${MAX_ROUNDS} FIX rounds. Human review required.`);
+if (result.verdict === "PASS") {
+    // Đường dẫn lấy từ paths.js, KHÔNG gõ tay. Bản trước ghi cứng
+    // "memory/working/deliverable-analyst.md" — thư mục đó đã đổi từ P5, nên dòng này chỉ
+    // người dùng tới một file không tồn tại. Đúng loại lỗi paths.js ra đời để chặn.
+    console.log(
+        `\n>> Xong sau ${result.round} vòng. Đọc: ${P.DELIVERABLE_ANALYST}\n` +
+        `   Cửa duyệt người sẽ CHẶN bước sau cho tới khi bạn đọc file trên rồi chạy\n` +
+        `   node qa.js approve qa-analyst "<tên bạn>"\n` +
+        `   (bỏ cửa khi demo nhanh: thêm --no-gate)\n`
+    );
+    process.exit(0);
+}
+
+console.error(`\n>> Đã qua ${MAX_ROUNDS} vòng FIX mà chưa đạt. Cần người xem lại.`);
 process.exit(1);

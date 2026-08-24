@@ -1,7 +1,9 @@
 # Skill: Spec Generator
 
 ## Purpose
-Dùng ngay sau `01_exploratory_ui_discovery.md`. Sinh 1 file Playwright `.spec.ts` tĩnh — bước "freeze" của nguyên tắc explore-then-freeze (`oracle-problem.md`).
+ĐƯỜNG DỰ PHÒNG, chỉ dùng khi không có catalogue step để đi đường `.feature`. Sinh 1 file Playwright `.spec.ts` tĩnh — bước "freeze" của nguyên tắc explore-then-freeze (`oracle-problem.md`).
+
+> **Cảnh báo:** đây là đường CŨ, nơi LLM viết cả file spec. Nó đã sinh ra 13/21 spec không thực hiện hành động nào và 3 spec chứa selector `ref=` không bao giờ khớp. Đường chính là `05_gherkin_writer.md` → `tools/gherkin-codegen.js`, nơi LLM chỉ viết `.feature` và code sinh spec.
 
 Hai thay đổi quan trọng so với bản trước:
 

@@ -1,12 +1,11 @@
 // qa.js
 // UI terminal cho cả hệ thống. Một lệnh duy nhất phải nhớ:  node qa.js
 //
-// VÌ SAO CÓ FILE NÀY. Trước đó muốn dùng hệ thống phải nhớ 4 lệnh khác nhau, mỗi lệnh một
-// bộ cờ riêng, và không có chỗ nào trả lời được câu "giờ tôi phải làm gì tiếp":
-//   node workflow/flow-2-leader-analyst.js "<task>" [--new-run]
-//   node workflow/flow-3-design-automate-verify-report.js --confirm-mcp [--vlm-all] [--no-gate]
-//   node agents/approve.js <agent> "<tên>"
-//   node agents/supervise.js [--stale-hours 24]
+// VÌ SAO CÓ FILE NÀY. Trước đó muốn dùng hệ thống phải nhớ 4 lệnh khác nhau (`flow-2-...js`,
+// `flow-3-...js`, `approve.js`, `supervise.js`), mỗi lệnh một bộ cờ riêng, tên đánh số theo
+// một hệ không ai giải thích được, và không có chỗ nào trả lời câu "giờ tôi phải làm gì tiếp".
+//
+// Giờ: MỘT cửa vào. `node qa.js` — mọi thứ khác đi qua đây.
 //
 // KHÔNG THÊM DEPENDENCY. `node:readline/promises` có sẵn từ Node 17. Thêm một thư viện TUI
 // cho một menu 6 dòng là đổi một menu 6 dòng lấy một chỗ có thể vỡ khi `npm install` lỗi.
@@ -45,7 +44,13 @@ async function cmdFlows() {
         console.log(`${i + 1}) ${renderFlow(flow, { nodes })}`);
         // Luồng hỏng vẫn được liệt kê — im lặng bỏ qua thì người dùng chỉ thấy luồng "biến mất".
         problems.forEach(p => console.log(`   SAI: ${p}`));
+        // In cả `params` chứ không chỉ `flags`: luồng `analyze` cần một chuỗi task, mà bản đầu
+        // chỉ in cờ nên dòng gợi ý bỏ sót đúng cái đối số bắt buộc.
         console.log(`   Lệnh: node qa.js run ${flow.name}` +
+            (flow.params?.length ? " " + flow.params.map(p =>
+                p.positional ? `"<${p.name}>"`
+                    : p.default === null ? `--${p.name}=<${p.kind}>`
+                        : `[--${p.name}=<${p.kind}>]`).join(" ") : "") +
             (flow.flags?.length ? " " + flow.flags.map(f => `[--${f.name}]`).join(" ") : ""));
     });
     console.log(HR);
@@ -89,7 +94,11 @@ async function cmdSupervise() {
 async function cmdNext() {
     const run = await currentRun();
     if (!run) {
-        console.log(`\nChưa có phiên nào đang mở.\n  Bắt đầu: node qa.js run leader-analyst "<tên task>"\n`);
+        console.log(
+            `\nChưa có phiên nào đang mở.\n` +
+            `  Chạy thử không cần trình duyệt:  node qa.js run analyze --task="<tên task>"\n` +
+            `  Chạy toàn bài:                   node qa.js run full --task="<tên task>" --confirm-mcp\n`
+        );
         return;
     }
     const state = await loadState();
@@ -102,7 +111,7 @@ async function cmdNext() {
     if (waiting) {
         console.log(`\n>> Việc tiếp theo là của BẠN: đọc ${waiting.output} rồi\n   node qa.js approve ${waiting.agent} "<tên bạn>"\n`);
     } else {
-        console.log(`\n>> Không có gì chờ bạn duyệt. Chạy tiếp luồng: node qa.js run design-to-report\n`);
+        console.log(`\n>> Không có gì chờ bạn duyệt. Chạy tiếp: node qa.js run full --confirm-mcp\n`);
     }
 }
 

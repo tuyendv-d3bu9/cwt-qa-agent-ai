@@ -16,6 +16,7 @@
 import { readFile } from "node:fs/promises";
 import { runTool } from "../runtime/tools.js";
 import { callLLM } from "../runtime/llm.js";
+import { runAgentLoop } from "../runtime/agent-loop.js";
 import { contextFor, getConfig, putConfig } from "../runtime/knowledge.js";
 import { registerArtifact } from "../qa-leader/tools/impact-analysis.js";
 import { artifactId, getArtifact, upsertArtifact } from "../runtime/db.js";
@@ -82,11 +83,14 @@ async function loadSkill(fileName) {
     return readFile(new URL(fileName, SKILLS_DIR), "utf8");
 }
 
+// Tier 2 is QUERIED, not injected — see memory/README.md and knowledge.js.
+const systemFor = (skillText, userText) =>
+    [ROLE, FACT, GEN_ONCE, ORACLE, CONVENTIONS, COST, DOMAIN, KNOWN_ISSUES, contextFor(userText), skillText]
+        .filter(Boolean).join("\n\n");
+
 async function askLLM(skillText, userText) {
     stats.llmCalls++;
-    const system = [ROLE, FACT, GEN_ONCE, ORACLE, CONVENTIONS, COST, DOMAIN, KNOWN_ISSUES, contextFor(userText), skillText]
-        .filter(Boolean).join("\n\n");
-    const res = await callLLM({ system, contents: [{ role: "user", parts: [{ text: userText }] }] });
+    const res = await callLLM({ system: systemFor(skillText, userText), contents: [{ role: "user", parts: [{ text: userText }] }] });
     return res.text;
 }
 
@@ -457,22 +461,20 @@ async function emitReusableCode({ flow, walk, registry }) {
  * `content: null` from emitSpec means a Gherkin step matched nothing in the catalogue. No
  * spec is written in that case — a spec silently missing its middle still reports green.
  */
-async function authorSpecViaFeature(testCase, { flow, catalogue }) {
-    const raw = await askLLM(await loadSkill("05_gherkin_writer.md"),
-        `test_case=${JSON.stringify(testCase)}\n` +
-        `flow_name=${flow?.name ?? "(không tên)"}\n` +
-        `step_catalogue=\n${catalogue.available.map(s =>
-            `- ${s.name} | "${s.text}" | kind=${s.kind} | needsValue=${s.needsValue}`).join("\n") || "(rỗng)"}\n` +
-        `missing_steps=\n${catalogue.missing.map(m => `- "${m.text}" (${m.why})`).join("\n") || "(không có)"}`);
+/**
+ * Compile the LLM's `.feature` in memory, exactly as the real emitter will.
+ *
+ * Used BOTH as the loop's gate and for the final compile, so what the gate accepted and what
+ * gets written are produced by the same code — a gate that checks something subtly different
+ * from what ships is worse than no gate.
+ */
+function compileFeature(parsed, { flow, catalogue, testCase }) {
+    if (!parsed) return { issues: [`Không parse được JSON. Trả về ĐÚNG một object JSON, không kèm giải thích.`] };
+    if (!parsed.steps?.length) return { issues: [`Trường "steps" rỗng — scenario phải có ít nhất một step.`] };
 
-    const parsed = parseJSON(raw);
-    if (!parsed?.steps?.length) {
-        return { specContent: null, why: "LLM không trả về step nào cho scenario", newSteps: parsed?.new_steps ?? [] };
-    }
-
-    // Round-trip through the .feature text on purpose: the file is the artefact a human
+    // Round-trip through the .feature TEXT on purpose: that file is the artefact a human
     // reviews and the flow's source of truth, so the spec must be compiled from exactly what
-    // was written to disk — not from a JSON object that only ever existed in memory.
+    // goes to disk — not from a JSON object that only ever existed in memory.
     const featureText = renderFeature({
         feature: parsed.feature ?? flow?.name ?? "Feature",
         scenarios: [{
@@ -484,14 +486,9 @@ async function authorSpecViaFeature(testCase, { flow, catalogue }) {
             })),
         }],
     });
-    const featurePath = `${P.FEATURES_DIR}/${testCase.tcId}.feature`;
-    await runTool("write_file", { path: featurePath, content: featureText });
 
     const { scenarios, problems } = parseFeature(featureText);
-    for (const p of problems) console.warn(`  [${testCase.tcId}] .feature: ${p}`);
-    if (!scenarios.length) {
-        return { specContent: null, why: ".feature sinh ra không có Scenario nào", featurePath, newSteps: parsed.new_steps ?? [] };
-    }
+    if (!scenarios.length) return { featureText, issues: [`.feature không có Scenario nào.`, ...problems] };
 
     const out = emitSpec({
         scenario: scenarios[0],
@@ -501,13 +498,74 @@ async function authorSpecViaFeature(testCase, { flow, catalogue }) {
         dataImport: SPEC_TO_DATA_IMPORT,
     });
 
+    // A step outside the catalogue is the ONE failure worth spending a revision on: the
+    // vocabulary is bounded and printed in the prompt, so "not in the catalogue" is always
+    // fixable by rewording — unlike a missing Expected Result, which needs a human.
+    const issues = out.unmatched.map(u =>
+        `Step ${u.step} — ${u.why}. Chỉ được dùng ĐÚNG các câu trong step_catalogue; ` +
+        `viết lại bằng câu gần nhất trong đó, hoặc bỏ step này nếu luồng không đi được tới đó.`);
+
+    return { featureText, scenario: scenarios[0], out, problems, issues };
+}
+
+/**
+ * Author the spec for ONE test case via a `.feature`.
+ *
+ * AGENT, not a single prompt (P11). Before this, a step the model worded slightly differently
+ * from the catalogue produced `specContent: null` and NO spec at all — a hard stop the model
+ * was never told about, for a mistake it could have fixed in one turn given the catalogue it
+ * already had in its prompt. The gate now hands the mismatch back and asks for a rewrite.
+ */
+async function authorSpecViaFeature(testCase, { flow, catalogue }) {
+    const skill = await loadSkill("05_gherkin_writer.md");
+    const userText =
+        `test_case=${JSON.stringify(testCase)}\n` +
+        `flow_name=${flow?.name ?? "(không tên)"}\n` +
+        `step_catalogue=\n${catalogue.available.map(s =>
+            `- ${s.name} | "${s.text}" | kind=${s.kind} | needsValue=${s.needsValue}`).join("\n") || "(rỗng)"}\n` +
+        `missing_steps=\n${catalogue.missing.map(m => `- "${m.text}" (${m.why})`).join("\n") || "(không có)"}`;
+
+    const res = await runAgentLoop({
+        system: systemFor(skill, userText),
+        task: userText,
+        label: `gherkin:${testCase.tcId}`,
+        maxRevisions: 2,
+        selfCheck: (text) => {
+            const { issues } = compileFeature(parseJSON(text), { flow, catalogue, testCase });
+            return { ok: issues.length === 0, issues };
+        },
+    });
+    stats.llmCalls += res.usage.llmCalls;
+
+    const parsed = parseJSON(res.text);
+    const compiled = compileFeature(parsed, { flow, catalogue, testCase });
+    const newSteps = parsed?.new_steps ?? [];
+
+    if (!compiled.featureText) {
+        return { specContent: null, why: compiled.issues.join(" "), newSteps };
+    }
+
+    // The .feature is written even when it does not compile: it is the evidence of WHAT the
+    // model asked for, and the fastest way for a human to see which step is missing from the
+    // library. A silent absence would leave nothing to look at.
+    const featurePath = `${P.FEATURES_DIR}/${testCase.tcId}.feature`;
+    await runTool("write_file", { path: featurePath, content: compiled.featureText });
+    for (const p of compiled.problems ?? []) console.warn(`  [${testCase.tcId}] .feature: ${p}`);
+
+    if (!compiled.out) {
+        return { specContent: null, featurePath, why: compiled.issues.join(" "), newSteps };
+    }
+    if (compiled.out.unmatched.length) {
+        console.warn(`  [${testCase.tcId}] vẫn còn step ngoài catalogue sau ${res.revisions} lần sửa — KHÔNG sinh spec.`);
+    }
+
     return {
-        specContent: out.content,
+        specContent: compiled.out.content,
         featurePath,
-        unmatched: out.unmatched,
-        assertionNote: out.assertionNote,
-        newSteps: parsed.new_steps ?? [],
-        why: out.content ? null : `có step không khớp catalogue: ${out.unmatched.map(u => u.step).join("; ")}`,
+        unmatched: compiled.out.unmatched,
+        assertionNote: compiled.out.assertionNote,
+        newSteps,
+        why: compiled.out.content ? null : `có step không khớp catalogue: ${compiled.out.unmatched.map(u => u.step).join("; ")}`,
     };
 }
 

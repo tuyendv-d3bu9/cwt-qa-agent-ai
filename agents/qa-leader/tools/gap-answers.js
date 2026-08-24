@@ -19,10 +19,14 @@
 // flow-2 can (a) stop again naming exactly the unanswered questions, (b) echo back what it
 // understood, and (c) persist each answer as durable project knowledge.
 
-/** `### GAP-001 · <title>` — one question block. The id is what everything keys on. */
-const HEADING_RE = /^#{2,4}\s*([A-Z][A-Z0-9]*-\d+)\s*(?:[·:\-—]\s*(.*))?$/;
+/** `### GAP-001 · <title>` — one question block. The id is what everything keys on.
+ *  Exported so `gap-report-check.js` can validate the FORMAT using the SAME regexes this
+ *  parser reads by. A format gate matching on its own private copy would eventually check
+ *  something subtly different from what actually gets parsed — and then it passes files the
+ *  parser cannot read. */
+export const HEADING_RE = /^#{2,4}\s*([A-Z][A-Z0-9]*-\d+)\s*(?:[·:\-—]\s*(.*))?$/;
 /** Labelled fields inside a block. */
-const FIELD_RE = /^\*\*(Vấn đề|Nguồn|Câu hỏi|Trả lời)\s*:?\*\*\s*:?\s*(.*)$/i;
+export const FIELD_RE = /^\*\*(Vấn đề|Nguồn|Câu hỏi|Trả lời)\s*:?\*\*\s*:?\s*(.*)$/i;
 
 const FIELD_KEY = {
     "vấn đề": "problem",

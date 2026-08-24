@@ -6,6 +6,7 @@ import { runTool, declarationsFor } from "../runtime/tools.js";
 import { callLLM } from "../runtime/llm.js";
 import { runAgentLoop, fileToolExecutor } from "../runtime/agent-loop.js";
 import { contextFor } from "../runtime/knowledge.js";
+import { skillDocsText } from "../runtime/skill-docs.js";
 import { verifyDeliverable, checkSummary, checkMissingRules, checkViewpoints } from "./tools/count-check.js";
 import { normalizeSection } from "./tools/section-normalizer.js";
 import * as P from "../runtime/paths.js";
@@ -56,13 +57,28 @@ async function loadSkill(fileName) {
     return readFile(new URL(fileName, SKILLS_DIR), "utf8");
 }
 
-const systemFor = (skillText, userText) =>
+// Every document a skill SAYS it uses is injected, derived from the skill's own text.
+//
+// THE BUG THIS FIXES. skills/02 said, in its PROMPT: "Dùng framework 06W để tìm tối thiểu 5
+// missing rule", and in its Quality Check: "phân loại đúng theo 6 dimension của 06W". But
+// memory/semantic/06W.md was never loaded here, so the model was ordered to apply a framework
+// it could not read — and filled the gap by inventing six dimensions. Same for
+// analysis-integrity.md (referenced by 3 skills), requirement-summary.md (2) and
+// viewpoint-library.md (1): five documents promised to the model and never delivered.
+//
+// This is the same failure already recorded in the comment above FACT, with different files.
+// A hand-written {skill → docs} table would have fixed today and drifted the next time
+// someone added a "xem `knowledge/y.md`" line, so the list is DERIVED from the skill text.
+const systemFor = async (skillText, userText) => {
+    const base = [ROLE, FACT, DELIVERY_RULES, CONVENTIONS];
+    const refs = await skillDocsText(skillText, { agentDir: "agents/qa-analyst", already: base });
     // Tier 2 is QUERIED, not injected — see memory/README.md and knowledge.js.
-    [ROLE, FACT, DELIVERY_RULES, CONVENTIONS, contextFor(userText), skillText].filter(Boolean).join("\n\n");
+    return [...base, refs.text, contextFor(userText), skillText].filter(Boolean).join("\n\n");
+};
 
 async function askLLM(skillText, userText) {
     const res = await callLLM({
-        system: systemFor(skillText, userText),
+        system: await systemFor(skillText, userText),
         contents: [{ role: "user", parts: [{ text: userText }] }],
     });
     stats.llmCalls++;
@@ -88,7 +104,7 @@ async function agentStep({ skillText, userText, tools = [], selfCheck, label, ma
         : selfCheck;
 
     const out = await runAgentLoop({
-        system: systemFor(skillText, userText),
+        system: await systemFor(skillText, userText),
         task: userText,
         tools,
         execute: tools.length ? execute : undefined,

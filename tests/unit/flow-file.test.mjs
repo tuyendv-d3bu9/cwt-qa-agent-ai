@@ -164,26 +164,112 @@ const FAKE_PATHS = { TEST_RESULTS: "x/test-results.json" };
         chk(`[${flow.name}] đối chiếu registry thật: không sai`, v.problems.length === 0, JSON.stringify(v.problems));
     }
 
-    const d2r = loaded.find(f => f.flow?.name === "design-to-report")?.flow;
-    chk(">>> design-to-report: đúng 4 bước, đúng thứ tự node",
-        JSON.stringify(d2r?.steps.map(s => s.node)) === JSON.stringify(["qa-test-designer", "qa-automation", "qa-verifier", "qa-reporter"]),
-        JSON.stringify(d2r?.steps.map(s => s.node)));
-    chk(">>> mỗi bước đều có cửa duyệt người (Human-Final như 6 role.md tuyên bố)",
-        d2r?.steps.every(s => s.gate), JSON.stringify(d2r?.steps.map(s => s.gate)));
-    chk(">>> bước qa-automation vẫn CẦN --confirm-mcp (không được mất khi chuyển sang khai báo)",
-        d2r?.steps[1].confirmFlag === "confirm-mcp" && Boolean(d2r?.steps[1].confirmReason),
-        JSON.stringify(d2r?.steps[1]));
+    const names = loaded.map(f => f.flow?.name).filter(Boolean).sort();
+    chk(">>> đúng bộ 4 luồng, không còn tên flow-2/flow-3",
+        JSON.stringify(names) === JSON.stringify(["analyze", "design", "full", "verify"]), JSON.stringify(names));
+
+    const full = loaded.find(f => f.flow?.name === "full")?.flow;
+    chk(">>> full: 5 bước, bước đầu là SCRIPT rồi tới 4 node, đúng thứ tự",
+        JSON.stringify(full?.steps.map(s => s.kind === "script" ? "script" : s.node))
+        === JSON.stringify(["script", "qa-test-designer", "qa-automation", "qa-verifier", "qa-reporter"]),
+        JSON.stringify(full?.steps.map(s => s.kind === "script" ? "script" : s.node)));
+    chk(">>> bước script khai `expect_step` — nếu thiếu, luồng đi tiếp khi nửa đầu còn chờ người",
+        full?.steps[0].expectStep === "qa-analyst", JSON.stringify(full?.steps[0]));
+    chk("bước script truyền task xuống và chuyển tiếp cờ --new-run",
+        JSON.stringify(full?.steps[0].args) === JSON.stringify(["$param.task"])
+        && JSON.stringify(full?.steps[0].passFlags) === JSON.stringify(["new-run"]),
+        JSON.stringify({ a: full?.steps[0].args, p: full?.steps[0].passFlags }));
+    chk(">>> mọi bước NODE đều có cửa duyệt người (Human-Final như 6 role.md tuyên bố)",
+        full?.steps.filter(s => s.kind === "node").every(s => s.gate),
+        JSON.stringify(full?.steps.map(s => s.gate)));
+    chk(">>> bước qa-automation vẫn CẦN --confirm-mcp (không được mất khi gộp luồng)",
+        full?.steps[2].confirmFlag === "confirm-mcp" && Boolean(full?.steps[2].confirmReason),
+        JSON.stringify(full?.steps[2].confirmFlag));
     chk(">>> test-results.json cũ bị xoá trước khi automation chạy lại",
-        JSON.stringify(d2r?.steps[1].deleteStale) === JSON.stringify(["TEST_RESULTS"]), JSON.stringify(d2r?.steps[1].deleteStale));
+        JSON.stringify(full?.steps[2].deleteStale) === JSON.stringify(["TEST_RESULTS"]), JSON.stringify(full?.steps[2].deleteStale));
     chk(">>> verifier vẫn dừng chờ người/CI chạy playwright",
-        d2r?.steps[2].waitForFile === "TEST_RESULTS" && d2r?.steps[2].waitForHint.includes("playwright"),
-        JSON.stringify(d2r?.steps[2].waitForHint));
+        full?.steps[3].waitForFile === "TEST_RESULTS" && full?.steps[3].waitForHint.includes("playwright"),
+        JSON.stringify(full?.steps[3].waitForHint));
     chk(">>> 3 verdict đủ cả (thiếu một cái là runner dừng vì 'verdict lạ')",
-        JSON.stringify(d2r?.steps[2].branch.map(b => b.value).sort()) === JSON.stringify(["ASK", "FIX", "PASS"]),
-        JSON.stringify(d2r?.steps[2].branch.map(b => b.value)));
+        JSON.stringify(full?.steps[3].branch.map(b => b.value).sort()) === JSON.stringify(["ASK", "FIX", "PASS"]),
+        JSON.stringify(full?.steps[3].branch.map(b => b.value)));
     chk("report-types KHÔNG mặc định sinh 'bug' (bug phải do người xác nhận)",
-        !d2r?.params.find(p => p.name === "report-types")?.default.includes("bug"),
-        JSON.stringify(d2r?.params));
+        !full?.params.find(p => p.name === "report-types")?.default.includes("bug"),
+        JSON.stringify(full?.params.find(p => p.name === "report-types")?.default));
+    chk(">>> `full` không đòi phiên sẵn (bước script tự mở phiên)", full?.requiresRun === false, String(full?.requiresRun));
+
+    const analyze = loaded.find(f => f.flow?.name === "analyze")?.flow;
+    chk(">>> `analyze` KHÔNG gọi MCP: không bước nào có confirm_flag (luồng an toàn cho lớp học)",
+        analyze?.steps.every(s => !s.confirmFlag), JSON.stringify(analyze?.steps.map(s => s.confirmFlag)));
+    chk(">>> `analyze` KHÔNG đóng phiên (design/full còn tiếp chính phiên đó)",
+        analyze?.finish === null, String(analyze?.finish));
+
+    const verify = loaded.find(f => f.flow?.name === "verify")?.flow;
+    chk("`verify` ĐÒI phiên sẵn — không có phiên thì không có spec nào để kiểm chứng",
+        verify?.requiresRun === true, String(verify?.requiresRun));
+
+    chk(">>> task là đối số VỊ TRÍ ở cả 3 luồng cần nó (QA Manual không phải gõ --task=)",
+        [full, analyze, loaded.find(f => f.flow?.name === "design")?.flow]
+            .every(f => f?.params.find(p => p.name === "task")?.positional === true));
+}
+
+// ─────────── 10. Bước dạng SCRIPT (Q1.1) ───────────
+{
+    const { flow, problems } = parse([
+        `name: f1`, `params:`, `  - name: task`, `    positional: true`,
+        `flags:`, `  - name: new-run`,
+        `steps:`, `  - script: workflow/leader-analyst.js`, `    expect_step: n1`,
+        `    args:`, `      - $param.task`, `    pass_flags:`, `      - new-run`,
+    ]);
+    chk("bước script parse sạch", problems.length === 0, JSON.stringify(problems));
+    chk("bước script có kind='script', node=null", flow.steps[0].kind === "script" && flow.steps[0].node === null, JSON.stringify(flow.steps[0].kind));
+}
+{
+    const { problems } = parse([`name: f1`, `steps:`, `  - script: workflow/x.js`]);
+    chk(">>> bước script THIẾU expect_step bị từ chối — script chờ-người và script xong ĐỀU thoát 0",
+        problems.some(p => p.includes("expect_step") && p.includes("mã thoát")), JSON.stringify(problems));
+}
+{
+    const { problems } = parse([`name: f1`, `steps:`, `  - node: n1`, `    script: workflow/x.js`]);
+    chk("khai cả node và script bị từ chối", problems.some(p => p.includes("một trong hai")), JSON.stringify(problems));
+}
+{
+    const { problems } = parse([`name: f1`, `steps:`, `  - script: workflow/x.js`, `    expect_step: n1`, `    branch_on: verdict`]);
+    chk("key chỉ dành cho node (branch_on) khai trên bước script bị từ chối",
+        problems.some(p => p.includes("branch_on")), JSON.stringify(problems));
+}
+{
+    const { flow } = parse([`name: f1`, `steps:`, `  - script: workflow/khong-co.js`, `    expect_step: n1`]);
+    const v = F.validateFlow(flow, { nodes: fakeNodes, paths: FAKE_PATHS, fileExists: () => false });
+    chk(">>> file script không tồn tại bị bắt TRƯỚC khi chạy (tên gõ sai = luồng chết giữa đường)",
+        v.problems.some(p => p.includes("không có file này")), JSON.stringify(v.problems));
+}
+{
+    const { flow } = parse([`name: f1`, `steps:`, `  - script: workflow/x.js`, `    expect_step: khong-co`]);
+    const v = F.validateFlow(flow, { nodes: fakeNodes, paths: FAKE_PATHS, fileExists: () => true });
+    chk("expect_step trỏ tới node không tồn tại bị bắt", v.problems.some(p => p.includes("khong-co")), JSON.stringify(v.problems));
+}
+{
+    const { flow } = parse([`name: f1`, `steps:`, `  - script: workflow/x.js`, `    expect_step: n1`, `    pass_flags:`, `      - chua-khai`]);
+    const v = F.validateFlow(flow, { nodes: fakeNodes, paths: FAKE_PATHS, fileExists: () => true });
+    chk("pass_flags trỏ tới cờ chưa khai bị bắt", v.problems.some(p => p.includes("chua-khai")), JSON.stringify(v.problems));
+}
+
+// ─────────── 11. Param vị trí ───────────
+{
+    const { flow } = parse([`name: f1`, `params:`, `  - name: task`, `    positional: true`, `steps:`, `  - node: n1`]);
+    chk(">>> đối số không có '--' vào đúng param vị trí",
+        F.parseArgs(flow, ["Phân tích voucher"]).params.task === "Phân tích voucher",
+        JSON.stringify(F.parseArgs(flow, ["Phân tích voucher"])));
+    chk("--task= vẫn dùng được song song", F.parseArgs(flow, ["--task=abc"]).params.task === "abc");
+    chk(">>> chuỗi vị trí THỨ HAI vào `unknown`, không im lặng biến mất",
+        JSON.stringify(F.parseArgs(flow, ["a", "b"]).unknown) === JSON.stringify(["b"]),
+        JSON.stringify(F.parseArgs(flow, ["a", "b"]).unknown));
+}
+{
+    const { problems } = parse([`name: f1`, `params:`, `  - name: a`, `    positional: true`, `  - name: b`, `    positional: true`, `steps:`, `  - node: n1`]);
+    chk("hai param vị trí bị từ chối (không cách nào biết đối số nào của ai)",
+        problems.some(p => p.includes("chỉ được một")), JSON.stringify(problems));
 }
 
 const fail = P.filter(([, c]) => !c);

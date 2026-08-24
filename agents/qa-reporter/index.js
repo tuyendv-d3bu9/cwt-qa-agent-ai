@@ -1,13 +1,15 @@
 // agents/qa-reporter/index.js
 // Node: QA Reporter — 7 report types (giáo trình QA Agent Reporter), chỉ chạy
-// đúng loại được yêu cầu trong reportTypes. Report thật ghi vào output/,
-// memory/working/deliverable-reporter.md chỉ là bản ghi nội bộ pipeline (Self Count Check).
+// đúng loại được yêu cầu trong reportTypes. Report thật ghi vào .qa-run/reports/;
+// .qa-run/deliverables/deliverable-reporter.md chỉ là bản ghi nội bộ pipeline (Self Count Check).
+// Mọi đường dẫn lấy từ runtime/paths.js — đừng gõ lại literal ở đây.
 
 import { readFile } from "node:fs/promises";
 import { runTool } from "../runtime/tools.js";
 import { callLLM } from "../runtime/llm.js";
+import { runAgentLoop } from "../runtime/agent-loop.js";
 import { createIssue } from "../runtime/jira-client.js";
-import { verifyAllDrafts } from "./tools/traceability-check.js";
+import { verifyAllDrafts, verifyBugDraft } from "./tools/traceability-check.js";
 import { calculateSprintMetrics, getPreviousSprintMetrics, appendSprintMetrics } from "./tools/sprint-metrics-calculator.js";
 import { mapBugDraftToJiraIssue, mapTestCaseToJiraIssue } from "./tools/jira-mapper.js";
 import * as P from "../runtime/paths.js";
@@ -29,10 +31,35 @@ async function loadSkill(fileName) {
     return readFile(new URL(fileName, SKILLS_DIR), "utf8");
 }
 
+const systemFor = (skillText) =>
+    [ROLE, FACT, SCHEMA, KNOWN_ISSUES, TRACEABILITY, AUDIENCE_TONE, REPORT_TYPES_OVERVIEW, SPRINT_CONVENTIONS, OUTPUT_CONVENTIONS, skillText].join("\n\n");
+
 async function askLLM(skillText, userText) {
-    const system = [ROLE, FACT, SCHEMA, KNOWN_ISSUES, TRACEABILITY, AUDIENCE_TONE, REPORT_TYPES_OVERVIEW, SPRINT_CONVENTIONS, OUTPUT_CONVENTIONS, skillText].join("\n\n");
-    const res = await callLLM({ system, contents: [{ role: "user", parts: [{ text: userText }] }] });
+    const res = await callLLM({ system: systemFor(skillText), contents: [{ role: "user", parts: [{ text: userText }] }] });
     return res.text;
+}
+
+/**
+ * Same call, but a deterministic gate's failure is fed BACK so the model revises (P11).
+ *
+ * `verifyAllDrafts()` has always run — after every draft was already written, with its result
+ * going into the deliverable's "Self Count Check" as a note. So a bug report missing its
+ * "Steps to Reproduce" shipped, and the model that omitted it never found out. A bug report
+ * with an empty required field is the one artefact here that LEAVES THE TEAM, which makes it
+ * the worst place to only warn a human who may not read that section.
+ */
+async function askLLMChecked(skillText, userText, { selfCheck, label, maxRevisions = 2 }) {
+    const out = await runAgentLoop({
+        system: systemFor(skillText),
+        task: userText,
+        selfCheck,
+        maxRevisions,
+        label,
+    });
+    if (!out.ok) {
+        console.warn(`  [qa-reporter/${label}] CHƯA ĐẠT (${out.exhausted}) — ${out.issues.join(" ")}`);
+    }
+    return out.text;
 }
 
 // ── Parsers (same conventions as qa-verifier/qa-automation) ──
@@ -110,9 +137,19 @@ async function buildBugDrafts({ candidates, testCaseDeliverable }) {
             evidence = check.exists ? candidate.Evidence : null;
             if (!check.exists) console.error(`  [bug] ${candidate.TC_ID}: verifier ghi ảnh ${candidate.Evidence} nhưng file không tồn tại — bỏ khỏi bug report.`);
         }
-        const content = await askLLM(skill,
+        // Gate per draft, not per batch: `verifyBugDraft` already works on one draft, and a
+        // per-draft gate tells the model exactly which field of which report is empty —
+        // a batch-level "3 vấn đề" is a message nobody can act on in one turn.
+        const content = await askLLMChecked(skill,
             `tc_id=${candidate.TC_ID}\nverifier_classification=${JSON.stringify(candidate)}\ntest_case=${JSON.stringify(testCase)}\n` +
-            `evidence_image=${evidence ?? "[không có ảnh evidence]"}`);
+            `evidence_image=${evidence ?? "[không có ảnh evidence]"}`,
+            {
+                label: `bug:${candidate.TC_ID}`,
+                selfCheck: (text) => {
+                    const v = verifyBugDraft({ tcId: candidate.TC_ID, draftMarkdown: text });
+                    return { ok: v.ok, issues: v.issues };
+                },
+            });
         drafts.push({ tcId: candidate.TC_ID, content, severity: (extractSeverity(content) || "").toLowerCase() });
     }
     const check = verifyAllDrafts(drafts.map(d => ({ tcId: d.tcId, draftMarkdown: d.content })));

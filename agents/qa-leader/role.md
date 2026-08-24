@@ -36,7 +36,6 @@
 ## Allowed Skills (agents/qa-leader/skills/)
 | # | Skill | Dùng khi nào |
 | --- | --- | --- |
-| 01 | `01_doc_convert_inspect.md` | Đầu vào có file mới/cập nhật trong `project-docs/` — chuẩn hóa DOCX/XLSX/PPTX sang MD/CSV bằng tool, không dùng LLM |
 | 02 | `02_doc_classification.md` | Sau khi 01 xong, có file `.md`/`.csv` chưa nằm trong 1 trong 6 thư mục chuẩn — phân loại và di chuyển vào đúng thư mục |
 | 02b | `02b_project_knowledge_distillation.md` | Ngay sau 02 — CHỈ với những tài liệu đã đổi (so hash TỪNG FILE) — ghi tầng 3 `memory/project/{domain-facts,known-issues,decisions-log}.md` theo **từng mục `###`**, không ghi đè cả file |
 | 02c | `02c_reference_extraction.md` | Cùng lượt với 02b — trích tri thức tham chiếu ỔN ĐỊNH (thuật ngữ/thành phần/field/config) vào tầng 2 để các node sau **tra cứu** thay vì nạp cả |
@@ -45,6 +44,13 @@
 | 04 | `04_task_assignment.md` | Sau khi 03 xác nhận đủ/hết mâu thuẫn (người dùng đã confirm) — sinh nội dung `.qa-run/deliverables/task-assignment.md` giao cho QA Analyst |
 | 05 | `05_deliverable_review.md` | Sau khi QA Analyst ghi `.qa-run/deliverables/deliverable-analyst.md` — review theo FACT, ra verdict PASS/FIX/ASK |
 | 06 | `06_workflow_progress_tracking.md` | Cuối mỗi milestone (sau bước 03, sau mỗi vòng FIX, và khi PASS) — cập nhật tiến độ |
+
+*(Skill `01_doc_convert_inspect.md` đã xoá: bước 1 là `convertDirectory()` trong
+`tools/convert-to-md.js` — deterministic, KHÔNG gọi LLM. Skill đó mô tả cho LLM một việc mà
+code đã làm xong: kiểm file tồn tại, đọc đuôi file, chuyển định dạng. Giữ nó lại thì `role.md`
+tuyên bố một năng lực mà `index.js` không bao giờ cấp — và role.md CHÍNH LÀ system prompt, nên
+đó là nói với model về một skill nó không có. Cùng lý do skill `01_test_result_analysis.md` của
+qa-verifier đã bị xoá.)*
 
 ## Tools riêng (agents/qa-leader/tools/)
 - `convert-to-md.js`: chuẩn hóa tài liệu (docx→md, xlsx→csv, pptx→md), dùng thư viện `mammoth`/`xlsx`/`officeparser`, KHÔNG dùng LLM. Chỉ Leader dùng, không đăng ký vào tool dùng chung của các node khác.

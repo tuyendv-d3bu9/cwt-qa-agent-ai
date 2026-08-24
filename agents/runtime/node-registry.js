@@ -1,8 +1,8 @@
 // agents/runtime/node-registry.js
 // Tự dò node theo QUY ƯỚC, không theo `import` (P7.2).
 //
-// VÌ SAO FILE NÀY TỒN TẠI. Thứ tự luồng từng nằm cứng trong hai script viết tay
-// (`workflow/flow-2` 282 dòng + `flow-3` 266 dòng), nối nhau bằng `import` ở đầu file.
+// VÌ SAO FILE NÀY TỒN TẠI. Thứ tự luồng từng nằm cứng trong hai script viết tay (282 + 266
+// dòng, đặt tên đánh số `flow-2`/`flow-3`), nối nhau bằng `import` ở đầu file.
 // Hệ quả: thêm một node = **sửa code JS**. Mà mục tiêu là "mô tả → AI sinh file → tự vào
 // luồng" — điều đó bất khả thi khi việc "vào luồng" là một dòng `import` ai đó phải gõ.
 //

@@ -22,3 +22,6 @@ output/
 
 tests/*.spec.ts
 tests/data/
+tests/
+
+.claude/

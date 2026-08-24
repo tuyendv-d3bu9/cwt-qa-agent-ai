@@ -60,6 +60,28 @@ chỉ chữ hoa
 
 *Nguồn: `project-docs/03_DEV/api.md`*
 
+### Flow: Áp mã giảm giá khi checkout
+**Trạng thái**: Còn treo — CHƯA có xác nhận trong tài liệu nguồn, không node nào được coi là đã chốt
+
+Luồng nghiệp vụ áp mã giảm giá tại trang thanh toán:
+- **Entry:** `https://cwshopgo.github.io/`
+- Các bước: 1. Thêm sản phẩm bất kỳ vào giỏ hàng ở trang chủ; 2. Mở trang thanh toán / giỏ hàng; 3. Nhập mã giảm giá vào ô nhập mã rồi áp dụng; 4. Tiến hành thanh toán; 5. Kiểm tra đơn hàng vừa tạo trong mục đơn hàng.
+- *Nguồn:* người dùng (QA) mô tả trực tiếp 2026-08-19.
+
+*Nguồn: `project-docs/03_DEV/UI-flow.md`*
+
+### Câu hỏi cần làm rõ về UI Flow và trạng thái hệ thống
+**Trạng thái**: Còn treo — CHƯA có xác nhận trong tài liệu nguồn, không node nào được coi là đã chốt
+
+Các vấn đề chưa rõ cần giải quyết từ tài liệu UI-flow.md:
+
+| # | Câu hỏi | Vì sao cần |
+|---|---|---|
+| A1 | Đưa app về trạng thái sạch (giỏ trống) trước mỗi test bằng cách nào — có chức năng xoá giỏ, hay clear localStorage, hay reload là sạch? | Chạy lại test trên cùng máy không được thấy giỏ hàng của lần trước. Agent soi UI có thể thấy nút xoá, nhưng "cách nào ĐÚNG để reset" là quyết định của bạn. |
+| A2 | TC-D-016 "Hệ thống tự gỡ mã" — sửa giỏ **sau khi** đã áp mã. Luồng đó đi thế nào? | Không nằm trong các bước chính → cần bổ sung mục `## Flow:` riêng. |
+
+*Nguồn: `project-docs/03_DEV/UI-flow.md`*
+
 ## Source
 `project-docs/03_DEV/API-spec-voucher-checkout.md`, `project-docs/06_Communication/Bien-ban-Sprint-Planning-S24.md`. Bảng bug đã biết tách riêng sang `known-issues.md` (không lặp lại ở đây).
 
