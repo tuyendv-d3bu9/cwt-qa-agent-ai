@@ -727,7 +727,7 @@ export async function run({ testCaseFile }) {
     const exported = await exportTestCases(deliverable.content);
     if (exported.malformed.length) {
         console.error(`  [testcase] ${exported.malformed.length} hàng bảng sai số cột, KHÔNG được dùng: ` +
-            exported.malformed.map(m => `${m.id ?? "?"}(dòng ${m.line}, ${m.cellCount}/${m.expected} cột)`).join(", "));
+            exported.malformed.map(m => `${m.id ?? "?"}(hàng ${m.row} của bảng, ${m.cellCount}/${m.expected} cột)`).join(", "));
     }
     const testCases = exported.cases;
     if (!testCases.length) {
