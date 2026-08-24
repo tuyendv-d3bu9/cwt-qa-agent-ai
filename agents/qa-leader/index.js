@@ -1,5 +1,5 @@
 ﻿// agents/qa-leader/index.js
-// Node: QA Leader — coordinator of 6 skills (01-06), does not analyze requirements itself.
+// Node: QA Leader — coordinator of its skills (02..06), does not analyze requirements itself.
 // Leader only does its own steps (setup + review). Orchestration loop lives in the workflow.
 
 // node:fs is used ONLY to load this node's own static role/knowledge/skill files at
@@ -8,11 +8,19 @@
 import { readFile } from "node:fs/promises";
 import { runTool } from "../runtime/tools.js";
 import { callLLM } from "../runtime/llm.js";
+import { runAgentLoop } from "../runtime/agent-loop.js";
 import { convertDirectory } from "./tools/convert-to-md.js";
 import { hashProjectDocsPerFile, diffManifest } from "./tools/project-docs-hash.js";
 import { storeKnowledgeSection, flagKnowledgeFromRemovedSource } from "./tools/project-knowledge-store.js";
-import { putTerm, putComponent, putField, putConfig } from "../runtime/knowledge.js";
+import { putTerm, putComponent, putField, putConfig, getConfig } from "../runtime/knowledge.js";
 import { computeImpact, renderImpactReport } from "./tools/impact-analysis.js";
+import { listRuns, stepsOfRun } from "../runtime/memory.js";
+import { superviseRuns, renderDashboard } from "./tools/run-supervisor.js";
+import { parseUiFlows } from "./tools/ui-flow-parser.js";
+import { checkGapReportFormat } from "./tools/gap-report-check.js";
+import { createHash } from "node:crypto";
+import { skillDocsText } from "../runtime/skill-docs.js";
+import * as P from "../runtime/paths.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
 // Tier 1 first, then this node's own layer on top. The private file explicitly says
@@ -28,18 +36,42 @@ async function loadSkill(fileName) {
     return readFile(new URL(fileName, SKILLS_DIR), "utf8");
 }
 
+// `skillDocsText` nạp mọi tài liệu mà CHÍNH skill đó nói là nó dùng, suy ra từ văn bản skill.
+// Ở node này nó bù đúng một chỗ hụt: `02b_project_knowledge_distillation.md` nhắc
+// `memory/semantic/testing-conventions.md` mà askLLM chưa bao giờ nạp file đó — prompt chỉ
+// model tới một quy ước nó không đọc được. Cùng loại lỗi đã ghi ở dòng 23–25 phía trên.
+async function systemFor(skillText, extraKnowledge = "") {
+    const base = [ROLE, extraKnowledge].filter(Boolean);
+    const refs = await skillDocsText(skillText, { agentDir: "agents/qa-leader", already: base });
+    return [...base, refs.text, skillText].filter(Boolean).join("\n\n");
+}
+
 async function askLLM(skillText, userText, extraKnowledge = "") {
     const res = await callLLM({
-        system: [ROLE, extraKnowledge, skillText].filter(Boolean).join("\n\n"),
+        system: await systemFor(skillText, extraKnowledge),
         contents: [{ role: "user", parts: [{ text: userText }] }],
     });
     return res.text;
 }
 
-// Strip markdown code fences (```json ... ```) that LLM may wrap around JSON
-function parseJSON(raw) {
-    const cleaned = raw.replace(/^```[\w]*\n?/m, "").replace(/```\s*$/m, "").trim();
-    return JSON.parse(cleaned);
+/**
+ * Strip markdown code fences (```json ... ```) that the LLM may wrap around JSON.
+ *
+ * Returns null on unparseable output instead of throwing. This used to throw — the only
+ * one of the five parseJSON copies in this repo that did — so a single malformed LLM
+ * response took down the whole run from inside a helper, with no indication of WHICH of
+ * the five call sites produced it. Every caller now has to decide what a failed parse
+ * means, which is the point: for step2_classify a null means "move nothing", not "move
+ * files according to garbage".
+ */
+function parseJSON(raw, what = "LLM output") {
+    const cleaned = String(raw ?? "").replace(/^```[\w]*\n?/m, "").replace(/```\s*$/m, "").trim();
+    try {
+        return JSON.parse(cleaned);
+    } catch (err) {
+        console.error(`  [parseJSON] ${what}: không parse được JSON (${err.message}). 200 ký tự đầu: ${cleaned.slice(0, 200)}`);
+        return null;
+    }
 }
 
 // Step 1 (skill 01) — standardize formats, DO NOT use LLM (deterministic tool)
@@ -99,7 +131,13 @@ async function step2_classify(sourceDir = "project-docs") {
         `available_folders=${JSON.stringify(folders)}\n` +
         `Chỉ được chọn thư mục đích trong available_folders — KHÔNG tự tạo tên thư mục mới, KHÔNG tự sửa chính tả tên thư mục.\n` +
         `Return ONLY a raw JSON object (no markdown, no code block) mapping source path -> destination path, e.g. { "${sourceDir}/tenFile.md": "${sourceDir}/${folders[0] ?? "01_Business"}/tenFile.md", ... }`);
-    const mapping = parseJSON(raw);
+    const mapping = parseJSON(raw, "step2_classify (bảng phân loại tài liệu)");
+    if (!mapping || typeof mapping !== "object") {
+        // Moving nothing is the safe failure: the files stay where they are and the next
+        // run tries again. Proceeding would mean renaming the user's documents based on
+        // output we could not even parse.
+        return { moved: [], skipped: unclassified.map(f => [f.path, null, "LLM trả về JSON không hợp lệ"]) };
+    }
 
     // `to` comes from LLM output, so it must not reach the filesystem unchecked:
     // runTool("move_file") validates BOTH ends through tools.js's safe(). The prefix
@@ -123,8 +161,8 @@ async function step2_classify(sourceDir = "project-docs") {
     return { moved, skipped };
 }
 
-const MANIFEST_PATH = "memory/project/manifest.json";
-const IMPACT_REPORT_PATH = "memory/working/impact-report.md";
+const MANIFEST_PATH = P.MANIFEST;
+const IMPACT_REPORT_PATH = P.IMPACT_REPORT;
 const VALID_KINDS = new Set(["domain", "issue", "decision"]);
 const VALID_STATUSES = new Set(["confirmed", "pending"]);
 const COMPONENT_KINDS = new Set(["page", "api", "module", "screen", "service"]);
@@ -319,28 +357,93 @@ async function step2b_updateProjectKnowledge() {
 }
 
 // Step 3 (skill 03) — cross-check, detect gaps/contradictions
+/**
+ * Gate for step 3's output (P11). Deterministic, no LLM.
+ *
+ * Two layers: the JSON envelope here, the gap-report FORMAT in
+ * `tools/gap-report-check.js` (which is where it can be tested without an LLM).
+ */
+function checkGapReport(raw) {
+    const parsed = parseJSON(raw, "step3_gapCheck (gate định dạng)");
+    if (!parsed || typeof parsed.hasGap !== "boolean") {
+        return { ok: false, issues: [`Phải trả về JSON {"hasGap": bool, "reportMarkdown": string}.`] };
+    }
+    // hasGap=false: không có câu hỏi nào thì không có gì phải định dạng.
+    if (parsed.hasGap === false) return { ok: true, issues: [] };
+    return checkGapReportFormat(parsed.reportMarkdown);
+}
+
 async function step3_gapCheck() {
     const skill = await loadSkill("03_info_gap_reporting.md");
     const listing = await runTool("list_files", { dir: "project-docs" });
-    const raw = await askLLM(skill,
+    const userText =
         `classified_documents=${JSON.stringify(listing.files.map(f => f.path))}\n` +
-        `Return ONLY a raw JSON object (no markdown, no code block): {"hasGap": bool, "reportMarkdown": string}`);
-    return parseJSON(raw);
+        `Return ONLY a raw JSON object (no markdown, no code block): {"hasGap": bool, "reportMarkdown": string}`;
+
+    const loop = await runAgentLoop({
+        system: await systemFor(skill),
+        task: userText,
+        label: "gap-check",
+        maxRevisions: 2,
+        selfCheck: (text) => checkGapReport(text),
+    });
+    if (!loop.ok) {
+        console.warn(`  [qa-leader/gap-check] CHƯA ĐẠT (${loop.exhausted}) — ${loop.issues.join(" ")}`);
+    }
+    const raw = loop.text;
+    const parsed = parseJSON(raw, "step3_gapCheck (rà soát mâu thuẫn tài liệu)");
+    if (!parsed || typeof parsed.hasGap !== "boolean") {
+        // Unreadable gap check => treat as A GAP, never as "tài liệu nhất quán".
+        // Same rule as verdict-combiner's "ảnh không đọc được -> UNCLEAR, không phải PASSED":
+        // a signal we cannot read must escalate to a human, never grant approval.
+        return {
+            hasGap: true,
+            reportMarkdown:
+                `### Không đọc được kết quả rà soát tài liệu\n\n` +
+                `Bước rà soát mâu thuẫn/thiếu hụt đã chạy nhưng **kết quả trả về không parse được**, ` +
+                `nên KHÔNG thể kết luận tài liệu đã nhất quán.\n\n` +
+                `Đây được coi là **có gap** một cách có chủ ý: coi là "không có gap" sẽ để cả pipeline ` +
+                `chạy tiếp dựa trên giả định chưa từng được kiểm.\n\n` +
+                `**Cần làm:** chạy lại bước này. Nếu vẫn lỗi, xem log \`[parseJSON] step3_gapCheck\` ` +
+                `để biết LLM đã trả về gì.\n`,
+        };
+    }
+    return parsed;
 }
 
-// Step 4 (skill 04) — Generate task assignment, write to memory/working/task-assignment.md
+// Step 4 (skill 04) — Generate task assignment, write to P.TASK_ASSIGNMENT
 async function step4_assignTask(task) {
     const skill = await loadSkill("04_task_assignment.md");
     const listing = await runTool("list_files", { dir: "project-docs" });
     const content = await askLLM(skill,
         `validated_documents=${JSON.stringify(listing.files.map(f => f.path))}\n` +
         `qa_analyst_name=QA Analyst Agent\ntask_scope=${task}`);
-    await runTool("write_file", { path: "memory/working/task-assignment.md", content });
+    await runTool("write_file", { path: P.TASK_ASSIGNMENT, content });
 }
 
 // ─────────────────────────────────────────────
 // PUBLIC EXPORTS — called by the workflow, not by other agents
 // ─────────────────────────────────────────────
+
+// Handover contract (P7.1). qa-leader was the ONE node without a CONTRACT, which meant a
+// generic runner could not include it in a declarative flow at all.
+//
+// Two things are unusual here and both are declared rather than special-cased in the runner:
+//   `entry: "runSetup"` — this node has five public functions (runSetup, runReview,
+//   trackProgress, distillUiFlows, supervise), not one `run`. The flow file picks the
+//   entry it wants; "runSetup" is the pipeline's starting point.
+//   `requires: []`  — its input is the task STRING, not a file. Nothing to check on disk.
+//
+// `produces` lists TASK_ASSIGNMENT only. runSetup can also legitimately end at
+// `waiting_input` having written GAP_REPORT instead — that is not a broken promise, so
+// flow-runner.js checks `produces` only for statuses that mean "finished".
+export const CONTRACT = {
+    agent: "qa-leader",
+    entry: "runSetup",
+    requires: [],
+    produces: [P.TASK_ASSIGNMENT],
+    inputs: {},
+};
 
 /**
  * runSetup — Steps 1-4 (convert -> classify -> gap-check -> assign task).
@@ -362,13 +465,13 @@ export async function runSetup({ task, formAnswers = null }) {
     if (!formAnswers) {
         const { hasGap, reportMarkdown } = await step3_gapCheck();
         if (hasGap) {
-            await runTool("write_file", { path: "memory/working/gap-report.md", content: reportMarkdown });
-            return { status: "waiting_input", data: { formPath: "memory/working/gap-report.md" }, error: null };
+            await runTool("write_file", { path: P.GAP_REPORT, content: reportMarkdown });
+            return { status: "waiting_input", data: { formPath: P.GAP_REPORT }, error: null };
         }
     }
 
     await step4_assignTask(task + (formAnswers ? `\n\nUser confirmed:\n${formAnswers}` : ""));
-    return { status: "ready", data: { taskFile: "memory/working/task-assignment.md" }, error: null };
+    return { status: "ready", data: { taskFile: P.TASK_ASSIGNMENT }, error: null };
 }
 
 /**
@@ -377,12 +480,30 @@ export async function runSetup({ task, formAnswers = null }) {
  */
 export async function runReview({ round }) {
     const skill = await loadSkill("05_deliverable_review.md");
-    const deliverable = await runTool("read_file", { path: "memory/working/deliverable-analyst.md" });
+    const deliverable = await runTool("read_file", { path: P.DELIVERABLE_ANALYST });
     const raw = await askLLM(skill,
         `deliverable_content=${deliverable.content}\nround=${round}\n` +
         `Return only a JSON object: {"verdict": "PASS"|"FIX"|"ASK", "reportMarkdown": string}`,
         FACT + "\n\n" + CONVENTIONS);
-    return parseJSON(raw);
+    const parsed = parseJSON(raw, "runReview (verdict PASS/FIX/ASK)");
+    const VERDICTS = new Set(["PASS", "FIX", "ASK"]);
+    if (!parsed || !VERDICTS.has(parsed.verdict)) {
+        // A verdict we cannot read becomes ASK, not PASS and not FIX.
+        // Before this, null fell through runRoundLoop's checks (`=== "ASK"` false,
+        // `=== "PASS"` false) and was treated as FIX — so an unparseable review silently
+        // burned all MAX_ROUNDS retries, each one a full analyst + review LLM pass.
+        return {
+            verdict: "ASK",
+            reportMarkdown:
+                `### Không đọc được verdict của bước review\n\n` +
+                `Review đã chạy nhưng verdict trả về không hợp lệ ` +
+                `(nhận được: ${JSON.stringify(parsed?.verdict)}).\n\n` +
+                `Được coi là **ASK** có chủ ý — verdict quyết định pipeline làm gì tiếp, nên khi ` +
+                `không đọc được thì phải dừng cho người xem, không tự chọn PASS (bỏ qua lỗi thật) ` +
+                `cũng không tự chọn FIX (đốt hết số vòng retry mà không ai biết vì sao).\n`,
+        };
+    }
+    return parsed;
 }
 
 /**
@@ -391,5 +512,130 @@ export async function runReview({ round }) {
 export async function trackProgress(stage, note) {
     const skill = await loadSkill("06_workflow_progress_tracking.md");
     const content = await askLLM(skill, `workflow_stage=${stage}\nnote=${note}`);
-    await runTool("write_file", { path: "memory/working/progress-report.md", content });
+    await runTool("write_file", { path: P.PROGRESS_REPORT, content });
+}
+
+/**
+ * distillUiFlows — `project-docs/03_DEV/UI-flow.md` → tier-3 `memory/project/ui-flows.md`.
+ *
+ * NO LLM. `ui-flow-parser.js` already turned the document into structure (flow name, entry
+ * URL, ordered steps), so there is nothing left to interpret. Paying a model to re-read
+ * something already parsed would add cost and a chance of paraphrasing the navigation
+ * backbone — the one thing that must not drift.
+ *
+ * Three outputs, three consumers:
+ *   tier 3 `ui-flows.md`  → qa-test-designer writes Steps that name real flow steps
+ *   tier 2 `components`   → queryable "which screens does this project have"
+ *   tier 2 `base_url`     → the config every node reads instead of hardcoding a URL
+ *
+ * `**Entry:**` becoming `base_url` matters: until now `base_url` could only come from `.env`
+ * or a manual putConfig, so a fresh clone had no way to know where the app lives even though
+ * the project documentation says so on its second line.
+ */
+export async function distillUiFlows({ docPath = P.UI_FLOW_DOC } = {}) {
+    const doc = await runTool("read_file", { path: docPath });
+    if (doc.error) {
+        return { status: "skipped", reason: `không đọc được ${docPath}: ${doc.error}`, flows: 0, problems: [] };
+    }
+
+    const { flows, problems, conventions } = parseUiFlows(doc.content);
+    for (const p of problems) console.warn(`  [ui-flow] ${p}`);
+    if (flows.length === 0) {
+        return { status: "skipped", reason: "không tìm thấy flow nào trong tài liệu", flows: 0, problems };
+    }
+
+    const hash = createHash("sha256").update(doc.content).digest("hex").slice(0, 16);
+    let sections = 0;
+    let components = 0;
+
+    // Mục "Quy ước…" của tài liệu — mang NGUYÊN VĂN vào tầng 3.
+    //
+    // Đây không phải một bước nào, nhưng nó đổi hẳn cách viết automation. Ví dụ thật: "web test
+    // không có DB, vào lại trang là sạch" → **không được điều hướng lại giữa luồng**. Trước khi
+    // có đoạn này, phần đó nằm trong tài liệu mà không tới được prompt của agent nào — đúng loại
+    // lỗi P9 (tài liệu có, không ai nạp).
+    if (conventions) {
+        const res = await storeKnowledgeSection({
+            kind: "uiflow",
+            status: "confirmed",
+            title: "Quy ước nghiệp vụ của app (người dùng xác nhận)",
+            content: conventions,
+            sourceFile: docPath,
+            sourceHash: hash,
+        });
+        if (res.action !== "unchanged") sections++;
+    } else {
+        console.warn(`  [ui-flow] ${docPath} không có mục "## Quy ước…" — không có quy ước nghiệp vụ nào được chưng cất.`);
+    }
+
+    for (const flow of flows) {
+        // One `###` section per flow. Steps are rendered verbatim — the whole value of this
+        // file is that it says what the document says, in the words the document used.
+        const body = [
+            flow.entry ? `**Điểm bắt đầu:** ${flow.entry}` : `**Điểm bắt đầu:** (tài liệu không nêu)`,
+            ``,
+            `| # | Bước | Loại |`,
+            `|---|---|---|`,
+            ...flow.steps.map(s => `| ${s.n} | ${s.text.replace(/\|/g, "\\|")} | ${s.kind} |`),
+            ``,
+            `> Đây là **ý định nghiệp vụ**, không phải locator. Tên/role/locator thật của phần tử do`,
+            `> \`qa-automation\` tìm bằng MCP lúc chạy (\`tools/flow-walker.js\`) và lưu ở registry.`,
+        ].join("\n");
+
+        const res = await storeKnowledgeSection({
+            kind: "uiflow",
+            status: "confirmed",
+            title: `Luồng: ${flow.name}`,
+            content: body,
+            sourceFile: docPath,
+            sourceHash: hash,
+        });
+        if (res.action !== "unchanged") sections++;
+
+        // Tier 2: the flow itself is a queryable component of the system under test.
+        putComponent({
+            name: flow.name,
+            kind: "module",
+            ref: flow.entry ?? null,
+            description: `Luồng nghiệp vụ ${flow.steps.length} bước, chưng cất từ ${docPath}`,
+            source_ref: docPath,
+        });
+        components++;
+
+        // De-hardcoding: the URL now has a documented source of truth.
+        if (flow.entry && !getConfig("base_url", null)) {
+            putConfig({
+                key: "base_url",
+                value: flow.entry,
+                description: `Lấy từ **Entry:** của luồng "${flow.name}" trong ${docPath}`,
+                source_ref: docPath,
+            });
+        }
+    }
+
+    return { status: "ok", flows: flows.length, sections, components, problems, file: P.UI_FLOWS };
+}
+
+/**
+ * supervise — look at EVERY run at once and say who has to act next.
+ *
+ * This is the Leader doing the one thing its name implies and previously could not: watch
+ * the other agents. It became possible only once run state moved from a single JSON file
+ * (which held exactly one run, `run_id` permanently null) into `.qa-run/runs.db`.
+ *
+ * Entirely deterministic — no LLM. "Is this run stuck?" and "who must act?" are rules over
+ * recorded facts (status, timestamps, approval flags), each with one right answer. Asking a
+ * model would add cost and the chance of a different answer each time for no gain.
+ *
+ * @param {{limit?: number, staleHours?: number, nowMs?: number, write?: boolean}} opts
+ */
+export async function supervise({ limit = 20, staleHours = 24, nowMs = Date.now(), write = true } = {}) {
+    const runs = await listRuns(limit);
+    const result = await superviseRuns({ runs, loadSteps: stepsOfRun, nowMs, staleHours });
+    const markdown = renderDashboard(result);
+    if (write) {
+        const res = await runTool("write_file", { path: P.SUPERVISION_REPORT, content: markdown });
+        if (res.error) console.error(`  [supervise] không ghi được ${P.SUPERVISION_REPORT}: ${res.error}`);
+    }
+    return { ...result, markdown, reportFile: write ? P.SUPERVISION_REPORT : null };
 }

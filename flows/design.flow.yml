@@ -1,0 +1,45 @@
+# flows/design.flow.yml
+#
+#   node qa.js run design "<tên task>"
+#
+# Tới BẢNG TEST CASE rồi dừng. Vẫn KHÔNG mở trình duyệt.
+#
+# Dùng để dạy phần "AI viết test case từ phân tích" mà chưa phải lo Playwright — và để thấy
+# rõ cửa duyệt: bạn phải đọc và duyệt bản phân tích trước khi test case được sinh.
+#
+# Kết quả: `.qa-run/deliverables/deliverable-test-designer.md`
+
+name: design
+title: Phân tích → test case
+description: >-
+  Như `analyze`, thêm bước QA Test Designer sinh bảng test case 8 trường.
+  Không cần trình duyệt.
+requires_run: false
+
+params:
+  - name: task
+    kind: string
+    positional: true
+    note: tên task/feature cần phân tích
+
+flags:
+  - name: new-run
+    note: mở phiên MỚI thay vì tiếp phiên đang mở
+  - name: no-gate
+    note: bỏ cửa duyệt người — chỉ dùng khi demo nhanh
+
+steps:
+  - script: workflow/leader-analyst.js
+    label: QA Leader → QA Analyst (hỏi–đáp + review)
+    args:
+      - $param.task
+    pass_flags:
+      - new-run
+    expect_step: qa-analyst
+
+  - node: qa-test-designer
+    label: Thiết kế test case
+    require_step: qa-analyst
+    gate: qa-analyst
+
+# Không đóng phiên: `full` tiếp tục chính phiên này.

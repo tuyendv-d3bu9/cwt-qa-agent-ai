@@ -1,7 +1,7 @@
 # Skill: UI Conventions Writer
 
 ## Purpose
-Dùng sau khi explore xong lượt authoring hiện tại. Ghi lại **quy ước UI THẬT đã quan sát được** thành `memory/working/ui-conventions.md` — baseline oracle mà `qa-verifier` dùng để phân biệt "spec lỗi thời" với "sản phẩm sai".
+Dùng sau khi explore xong lượt authoring hiện tại. Ghi lại **quy ước UI THẬT đã quan sát được** thành `.qa-run/deliverables/ui-conventions.md` — baseline oracle mà `qa-verifier` dùng để phân biệt "spec lỗi thời" với "sản phẩm sai".
 
 Input **không còn là snapshot thô**. Trước đây skill này nhận toàn bộ N snapshot nối lại — payload lớn nhất trong cả node, và mô tả cùng một trang N lần. Giờ nó nhận **registry phần tử đã giải quyết** (`role` + accessible name + locator do Playwright sinh), xem `knowledge/mcp-cost-optimization.md`.
 

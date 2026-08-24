@@ -10,15 +10,27 @@ Test Designer KHÔNG định nghĩa lại risk matrix hay viewpoint — tái dù
 - **Ma trận Likelihood × Impact** (ưu tiên hoá risk): xem `agents/qa-leader/knowledge/task-management-conventions.md`, mục 3.
 - **8-viewpoint library** (Happy Path, Negative, Boundary, Security, UX, Performance, Accessibility, Integration + cách chọn theo Business Impact × Likelihood × Detectability): xem `agents/qa-analyst/knowledge/viewpoint-library.md`.
 
-### Technique selection theo field type (Function D)
+### Technique selection theo BẢN CHẤT field
 
-| Field | Technique ưu tiên | Lý do |
+Quy ước của framework, đúng với mọi dự án. Chọn theo **bản chất** field, không theo tên field —
+tên field là dữ liệu của dự án, đọc từ tầng 2 (`contextFor()`), không viết cứng ở đây.
+
+| Bản chất field | Technique ưu tiên | Vì sao |
 |---|---|---|
-| `discount_amount`, `min_order_value`, `max_discount` (số tiền) | Boundary Value Analysis (BVA) | Có min/max/threshold rõ ràng (API spec mục 5, 6) |
-| `discount_type` (PERCENT / FIXED / FREESHIP) | Equivalence Partitioning (EP) + Decision Table | Mỗi loại có logic tính khác nhau (API spec mục 6, 8) |
-| `expire_at` (hạn sử dụng) | Boundary Value Analysis + State Transition | So sánh UTC timestamp, có mốc chuyển trạng thái hết hạn (API spec mục 7, liên quan BUG-1170) |
-| `voucher_code` (input) | Equivalence Partitioning + Negative | Case-sensitive, chỉ nhận chữ hoa (API spec mục 2, liên quan BUG-1163) |
-| Giỏ hàng thay đổi sau khi đã áp mã | State Transition | Chưa có endpoint re-validate (API spec — Known limitations, liên quan BUG-1171) |
+| Có min/max/threshold rõ ràng (số tiền, số lượng, %) | Boundary Value Analysis (BVA) | Lỗi tập trung ở ngay hai bên mốc, không rải đều trong khoảng |
+| Có nhiều nhánh loại trừ nhau, mỗi nhánh một công thức | Equivalence Partitioning (EP) + Decision Table | Cần phủ mỗi nhánh ít nhất 1 lần và phủ tổ hợp điều kiện |
+| Chuyển trạng thái theo thời gian hoặc theo hành động | BVA + State Transition | Mốc chuyển trạng thái là biên; và thứ tự hành động tự nó sinh lỗi |
+| Ô nhập tự do có ràng buộc định dạng | EP + Negative | Hợp lệ/không hợp lệ chia lớp được; phần lớn lỗi nằm ở lớp không hợp lệ |
+| Trạng thái phụ thuộc thay đổi ở nơi khác (một phần đổi làm phần đã tính lại sai) | State Transition | Đây là loại lỗi mà test một màn hình đơn lẻ không bao giờ thấy |
+
+> **VÍ DỤ** (dữ liệu của dự án hiện tại, KHÔNG phải quy ước của framework — để thấy cách áp bảng
+> trên): `min_order_value` là *có threshold* → BVA · `discount_type` (PERCENT/FIXED/FREESHIP) là
+> *nhiều nhánh loại trừ nhau* → EP + Decision Table · `expire_at` là *chuyển trạng thái theo
+> thời gian* → BVA + State Transition · `voucher_code` là *ô nhập có ràng buộc định dạng* →
+> EP + Negative · "giỏ hàng đổi sau khi đã áp mã" là *phụ thuộc thay đổi ở nơi khác* →
+> State Transition.
+>
+> Field của dự án khác sẽ khác hẳn — đừng khớp theo TÊN trong ví dụ này, khớp theo **bản chất**.
 
 ### Rule
 - Không chọn cùng 1 technique cho mọi field — chọn theo bảng trên; field mới không có trong bảng thì lý luận tương tự (dựa trên bản chất field: có threshold rõ → BVA, có nhiều nhánh loại trừ nhau → EP/Decision Table, có chuyển trạng thái theo thời gian/hành động → State Transition).

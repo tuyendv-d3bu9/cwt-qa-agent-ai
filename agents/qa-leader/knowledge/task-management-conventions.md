@@ -21,8 +21,8 @@ Tái dùng ma trận **Likelihood × Impact** đã học Module 3 Bài 3.1 để
 - Không hỏi quá 5 câu 1 lần trong 1 report — nếu nhiều hơn, nhóm theo module/nhóm tài liệu để người dùng trả lời theo đợt, tránh form quá dài không ai trả lời hết.
 
 ### 4. Quy ước file trao đổi với QA Analyst
-- Leader **chỉ ghi** `memory/working/task-assignment.md`, **chỉ đọc** `memory/working/deliverable-analyst.md`.
-- Analyst **chỉ đọc** `memory/working/task-assignment.md`, **chỉ ghi** `memory/working/deliverable-analyst.md`.
+- Leader **chỉ ghi** `.qa-run/deliverables/task-assignment.md`, **chỉ đọc** `.qa-run/deliverables/deliverable-analyst.md`.
+- Analyst **chỉ đọc** `.qa-run/deliverables/task-assignment.md`, **chỉ ghi** `.qa-run/deliverables/deliverable-analyst.md`.
 - Không agent nào được ghi đè file thuộc quyền ghi của agent kia — vi phạm ranh giới này là lỗi kiến trúc, không phải lỗi nghiệp vụ.
 - Vòng FIX không tạo file mới (`deliverable_v2.md`...) — ghi đè lại đúng 1 file, lịch sử từng round do skill 06 (`workflow_progress_tracking`) ghi log riêng.
 

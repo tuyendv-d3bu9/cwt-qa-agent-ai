@@ -1,42 +1,105 @@
-# Workflow — Practical AI for Manual Testers
+# Workflow — khung chạy
 
-Thư mục này chứa **runner** cho từng luồng (flow) của AI QA Workflow
+Nơi **duy nhất** biết toàn cảnh: một luồng có bao nhiêu bước, theo thứ tự nào, chỗ nào cần
+người duyệt. `agents/<node>/` không biết gì về node khác; **node không gọi node**.
 
-## Quy ước đặt tên
-`flow-N-<mo-ta-ngan>.js` — **Tạo luồng cho 01 quy trình cụ thể**, không xóa khi có flow mới
+## 4 file, và mỗi file làm gì
 
-## Tiến độ các luồng
+| File | Vai trò |
+|---|---|
+| `flow-runner.js` | **KHUNG CHẠY CHÍNH.** Đọc file luồng rồi gọi node qua `CONTRACT`. Không biết node nào làm gì → **thêm node mới không sửa file này** |
+| `flow-file.js` | Đọc + **kiểm tĩnh** file luồng: tên node lạ, cờ chưa khai, thiếu `confirm_reason`, thiếu `expect_step`… → nổ TRƯỚC khi chạy bước nào |
+| `leader-analyst.js` | Nửa đầu pipeline (Leader + Analyst). Là **script**, được gọi bằng một BƯỚC `script:` trong file luồng |
+| `README.md` | file này |
 
-| Flow | Trạng thái | Agent tham gia |
+**Thứ tự luồng KHÔNG nằm ở đây.** Nó nằm trong `flows/*.flow.yml` — là **dữ liệu**, không phải
+code. Trước đây thứ tự viết cứng trong hai script đánh số `flow-2`/`flow-3` (282 + 266 dòng),
+nối nhau bằng `import`; thêm một node là **sửa code JS**. Cả hai đã bị bỏ.
+
+## Cách chạy — chỉ cần một lệnh
+
+```bash
+node qa.js                       # menu
+node qa.js flows                 # liệt kê luồng + lệnh chạy từng luồng
+node qa.js run <luồng> "<task>"  # chạy
+node qa.js next                  # đang chờ ai
+```
+
+## Bốn luồng cấp sẵn
+
+| Luồng | Bước | Dùng khi |
 |---|---|---|
-| `flow-2-leader-analyst.js` | ✅ Chạy được | QA Leader + QA Analyst (cả 2 build đầy đủ, không còn là stub) |
-| `flow-3-design-automate-verify-report.js` | ✅ Chạy được (chưa live-test) | QA Test Designer → QA Automation → QA Verifier → QA Reporter. Yêu cầu `flow-2` đã PASS trước. Có 3 điểm dừng bắt buộc chờ người: (a) **cửa duyệt người** trước mỗi node — `node agents/approve.js <agent> "<tên>"`, bỏ bằng `--no-gate`; (b) trước Automation — cần flag `--confirm-mcp` (gọi MCP Playwright thật); (c) sau Automation — cần người/CI tự chạy `npx playwright test --reporter=json` (agent không tự chạy test) |
+| `analyze` | leader-analyst | **chạy thử lần đầu** — không mở trình duyệt, không gọi MCP |
+| `design` | + qa-test-designer | tới bảng test case |
+| `full` | + automation + verifier + reporter | toàn bài. **Chạy lại được**: bỏ qua bước đã xong |
+| `verify` | qa-verifier + qa-reporter | đã có `test-results.json`, chỉ kết luận + báo cáo |
 
-## Cách chạy flow hiện tại
+`full` chạy lại được nên không cần luồng riêng cho "nửa sau": chạy lại `full` là nó bỏ qua các
+bước đã xong và tiếp đúng chỗ đang dở.
 
-```bash
-node workflow/flow-2-leader-analyst.js "Phan tich Function D - Voucher Checkout"
+## Hai loại bước
+
+```yaml
+steps:
+  - node: qa-test-designer        # gọi một node trong agents/
+    gate: qa-analyst
+
+  - script: workflow/leader-analyst.js   # chạy một script bằng TIẾN TRÌNH CON
+    args:
+      - $param.task
+    pass_flags:
+      - new-run
+    expect_step: qa-analyst
 ```
 
-Nếu Leader trả `status: "waiting_input"`:
-1. Mở file được ghi trong `data.formPath` (thường là `memory/working/gap-report.md`).
-2. Điền câu trả lời ngay dưới mỗi câu hỏi, lưu lại.
-3. Chạy lại **đúng lệnh trên** — runner tự phát hiện file đã có nội dung và dùng làm `formAnswers`.
+### Vì sao có bước `script:`
 
-Sau khi `flow-2` PASS, chạy tiếp:
+`leader-analyst` không diễn đạt được bằng khai báo:
 
-```bash
-node workflow/flow-3-design-automate-verify-report.js --confirm-mcp
-# Demo nhanh (bỏ cửa duyệt người): thêm --no-gate
-node workflow/flow-3-design-automate-verify-report.js --confirm-mcp --no-gate
-```
+1. **Hỏi–đáp theo TỪNG CÂU** — `gap-report.md` có ô `**Trả lời:**` cho mỗi `GAP-nnn`; lần chạy
+   sau chỉ nhắc câu còn trống, câu đã trả lời thì **xác nhận lại** và ghi vào `decisions-log.md`.
+   Đó là trạng thái theo từng câu hỏi, không phải "dừng chờ một file".
+2. **Vòng review leader ↔ analyst** tối đa 3 lượt, trong đó `FIX` là **đi lại cùng node** kèm
+   feedback. `branch: rework` chỉ biết đánh dấu rồi dừng.
 
-- **Cửa duyệt người** (mặc định BẬT): flow chặn trước mỗi node cho tới khi bạn duyệt bước trước. Duyệt bằng `node agents/approve.js <agent> "<tên>"`. Xem trạng thái phiên: `node agents/approve.js` (không tham số).
-- Nếu chưa có `memory/working/test-results.json`, flow dừng lại và yêu cầu chạy `npx playwright test --reporter=json` trước, rồi chạy lại đúng lệnh trên.
-- Verdict `FIX` từ Verifier → chạy lại đúng lệnh trên (kèm `--confirm-mcp`) để Automation sinh spec mới.
-- Verdict `ASK` → đọc `memory/working/deliverable-verifier.md`, tự xác nhận bug thật rồi tự gọi `qa-reporter` với `reportTypes` phù hợp (flow không tự đoán thay).
-- Verdict `PASS` → tự chạy tiếp QA Reporter với `reportTypes` mặc định `daily,narrative` (truyền tham số thứ 2 để đổi, vd `node workflow/flow-3-design-automate-verify-report.js --confirm-mcp sprint,release`).
+Nhưng nếu nó chỉ là một luồng riêng thì **không có luồng nào chạy hết** từ tài liệu tới báo cáo,
+và người dùng phải học 2 lệnh rời. Bước `script:` nối hai nửa mà không phải bẻ script đặc thù
+vào khuôn khai báo.
 
-## `workflow/` khác `agents/`?
-- `agents/<node>/` = logic của 1 agent, không biết gì về agent khác ngoài agent nó trực tiếp gọi.
-- `workflow/` = nơi duy nhất biết toàn cảnh: hôm nay luồng có bao nhiêu agent, chạy theo lệnh nào.
+### `expect_step` — ràng buộc quan trọng nhất của bước script
+
+Script thoát **0** cả khi nó **dừng có chủ ý** để chờ bạn điền `gap-report`, y như khi nó chạy
+xong. Nên runner **không tin mã thoát**: sau khi script chạy, nó đọc trạng thái bước trong DB.
+
+- Chưa `done` → **dừng luồng dạng chờ-người** (không phải lỗi), và **không đi tiếp**.
+- Đã `done` → đi tiếp.
+- Lần chạy sau, `done` rồi → **bỏ qua script**, nên `full` chạy lại được nhiều lần.
+
+Thiếu `expect_step` thì luồng sẽ chạy `qa-test-designer` trong khi nửa đầu còn đang chờ người
+trả lời — nên `flow-file.js` **từ chối** bước script không khai nó.
+
+## Ba điểm dừng chờ NGƯỜI — đều là CHỦ Ý
+
+| Điểm dừng | Khai bằng | Lý do |
+|---|---|---|
+| Cửa duyệt trước mỗi node | `gate: <node>` | Human-Final, đúng như cả 6 `role.md` tuyên bố. Bỏ bằng `--no-gate` (chỉ khi demo) |
+| Trước QA Automation | `confirm_flag: confirm-mcp` | gọi MCP Playwright **thật**, mở trình duyệt tới `base_url`. Xác nhận **mỗi lần** |
+| Sau QA Automation | `wait_for_file: TEST_RESULTS` | agent **không tự chạy test**: `npx playwright test --reporter=json` là việc của người/CI |
+
+Duyệt: `node qa.js approve <node> "<tên bạn>"` · Xem đang chờ ai: `node qa.js next`
+
+## Verdict của QA Verifier
+
+Khai trong `branch:` của file luồng, không viết cứng trong code:
+
+| Verdict | Hành động | Nghĩa |
+|---|---|---|
+| `PASS` | `continue` | đi tiếp sang QA Reporter |
+| `FIX` | `rework: qa-automation` | **spec** lỗi thời so với UI thật, KHÔNG phải lỗi sản phẩm → chạy lại kèm `--confirm-mcp` |
+| `ASK` | `stop` | cần người đọc `deliverable-verifier.md` và tự xác định bug thật, rồi chạy lại với `--report-types=bug`. Luồng **không đoán thay** |
+
+Verifier trả về một verdict không nằm trong 3 nhánh trên → runner **dừng và báo**, không đoán.
+
+## Mặc định `report-types` KHÔNG có `bug`
+
+Mặc định `daily,narrative`. Bug report chỉ sinh khi người đã xác nhận đó là bug thật.

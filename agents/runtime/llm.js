@@ -84,6 +84,15 @@ export async function callLLM({ system, contents, tools = [], useCache = true, t
   const out = {
     text: res.text ?? "",
     functionCalls: res.functionCalls ?? [],
+    // The model's turn EXACTLY as the API produced it, parts and all. A tool loop must
+    // echo this back verbatim rather than rebuilding a turn from `functionCalls`:
+    // Gemini 3 attaches a `thoughtSignature` to functionCall parts and REJECTS the next
+    // request without it —
+    //   400 INVALID_ARGUMENT "Function call is missing a thought_signature in functionCall
+    //   parts. This is required for tools to work correctly"
+    // Reconstructing {name, args} loses the signature, so the second turn of every
+    // tool-using conversation failed. See ai.google.dev/gemini-api/docs/thought-signatures.
+    content: res.candidates?.[0]?.content ?? null,
     usage: res.usageMetadata ?? null,
     fromCache: false,
   };

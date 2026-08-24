@@ -10,7 +10,7 @@ Convention
 - **Fail rate** = số test KHÔNG PASSED (gồm cả SPEC_ISSUE lẫn BEHAVIOR_MISMATCH/UNCLEAR) / tổng số test đã chạy × 100%.
 - **Bug density** = số bug draft đã xác nhận (nhãn BEHAVIOR_MISMATCH/UNCLEAR) / tổng số test case đã thiết kế.
 
-### `output/sprint-history.json` — quy ước append
+### `.qa-run/reports/sprint-history.json` — quy ước append
 - File là 1 mảng JSON, mỗi phần tử là kết quả 1 lần chạy Sprint Report:
 ```json
 [

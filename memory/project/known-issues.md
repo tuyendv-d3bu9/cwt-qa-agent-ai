@@ -32,6 +32,23 @@ Không tạo test case mới trùng các bug dưới đây. Nếu cần cover, t
 
 Severity là trục ĐỘC LẬP với Priority xử lý bug (xem `agents/qa-reporter/knowledge/bug-report-schema.md` để phân biệt 2 trục này) — không suy Priority trực tiếp từ Severity hay ngược lại.
 
+### Bug đã biết (bug_export_S23.csv)
+Danh sách các lỗi tồn đọng cần lưu ý khi kiểm thử:
+
+| Bug ID | Mô tả | Status |
+|---|---|---|
+| BUG-1142 | Tổng tiền lệch 1đ khi áp mã phần trăm | In Progress |
+| BUG-1170 | Mã hết hạn vẫn áp được nếu áp lúc 00:30 sáng | Open |
+| BUG-1180 | Áp mã FREESHIP30 trừ vào tiền hàng thay vì phí ship | Reopened |
+| BUG-1181 | Không có thông báo khi mã hết lượt sử dụng | Open (Not a bug - chưa implement) |
+
+*Nguồn: `project-docs/05_QA/bug_export_S23.csv`*
+
+### Bug đã biết
+| B-1 | x |
+
+*Nguồn: `project-docs/05_QA/bug.csv`*
+
 ## Source
 `project-docs/05_QA/bug_export_S23.csv`.
 

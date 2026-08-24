@@ -24,7 +24,7 @@ QA Verifier KHÔNG định nghĩa lại PASS/FIX/ASK — tái dùng nguyên ngh�
 | Kênh | Nguồn | Quyết định |
 |---|---|---|
 | **Functional** | `expect()` trong spec → `test-results.json` | **pass / fail** — nguồn DUY NHẤT |
-| **Visual** | `evidence/<TC_ID>-after.jpg` → VLM (skill `03_screenshot_analysis.md`) | **vì sao** fail, và **có gì `expect()` không nhìn tới** |
+| **Visual** | `.qa-run/evidence/<TC_ID>-after.jpg` → VLM (skill `03_screenshot_analysis.md`) | **vì sao** fail, và **có gì `expect()` không nhìn tới** |
 
 Ảnh chỉ được **hạ cấp** kết luận (pass → cần người xem). Ảnh **không bao giờ** biến test fail thành pass, và không bao giờ tự kết luận pass. Xem `agents/qa-automation/knowledge/oracle-problem.md` mục "Ranh giới của ảnh".
 

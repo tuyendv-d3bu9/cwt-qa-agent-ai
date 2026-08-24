@@ -1,7 +1,7 @@
 # Skill: Coverage Strategy
 
 ## Purpose
-Dùng đầu tiên khi nhận `memory/working/deliverable-analyst.md` mới (hoặc khi có bản cập nhật từ Analyst). Đi qua từng viewpoint/test idea của Analyst, gán mức rủi ro (Likelihood × Impact) và chọn technique phù hợp (EP/BVA/Decision Table/State Transition) — làm nền cho skill `02_boundary_generator.md` và `03_test_case_formatter.md`. KHÔNG tự tạo thêm test idea mới ngoài những gì Analyst đã sinh.
+Dùng đầu tiên khi nhận `.qa-run/deliverables/deliverable-analyst.md` mới (hoặc khi có bản cập nhật từ Analyst). Đi qua từng viewpoint/test idea của Analyst, gán mức rủi ro (Likelihood × Impact) và chọn technique phù hợp (EP/BVA/Decision Table/State Transition) — làm nền cho skill `02_boundary_generator.md` và `03_test_case_formatter.md`. KHÔNG tự tạo thêm test idea mới ngoài những gì Analyst đã sinh.
 
 ## Knowledge Reference
 - `knowledge/boundary-coverage-conventions.md` — bảng field → technique ưu tiên.
@@ -13,8 +13,8 @@ Dùng đầu tiên khi nhận `memory/working/deliverable-analyst.md` mới (ho�
 Chain-of-thought
 
 ## Variables
-{{task}} — nội dung `memory/working/task-assignment.md` (scope được Leader giao)
-{{deliverable_analyst_content}} — toàn bộ nội dung `memory/working/deliverable-analyst.md` (4 phần: Requirement Summary, Missing Rules, Viewpoints & Test Ideas, Self Count Check)
+{{task}} — nội dung `.qa-run/deliverables/task-assignment.md` (scope được Leader giao)
+{{deliverable_analyst_content}} — toàn bộ nội dung `.qa-run/deliverables/deliverable-analyst.md` (4 phần: Requirement Summary, Missing Rules, Viewpoints & Test Ideas, Self Count Check)
 
 ## PROMPT
 Bạn là QA Test Designer Agent. Scope được giao:

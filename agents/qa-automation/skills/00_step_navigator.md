@@ -10,8 +10,26 @@ Dùng cho **những bước mà `tools/step-planner.js` KHÔNG map được bằ
 ## Prompt Type
 Chain-of-thought
 
+## ⚠ ĐÂY LÀ MỘT VÒNG LẶP, KHÔNG PHẢI HỎI MỘT LẦN
+
+`index.js` gọi skill này **nhiều lượt cho cùng một bước** (tối đa 3): sau mỗi hành động nó
+**chụp lại trang** rồi hỏi bạn tiếp, với trang **đã thay đổi**.
+
+Trước đây chỉ hỏi đúng một lần: bạn chọn 1 tool, `index.js` gọi 1 lần rồi đi sang bước sau —
+bạn **không bao giờ thấy hành động của mình gây ra chuyện gì**. Một bước thất bại vẫn được coi
+như xong, và mọi bước sau đó được quyết định dựa trên một trạng thái trang không ai xem lại.
+
+Hệ quả cho bạn:
+- Bước cần **2 hành động** (mở dropdown rồi chọn) thì trả `done: false` ở lượt đầu, lượt sau
+  chọn hành động tiếp — đừng cố nhồi cả hai vào một lượt.
+- Đọc `{{da_lam_roi}}` trước khi quyết: **đừng lặp lại một hành động vừa lỗi**. Nếu lỗi rồi thì
+  đổi cách, hoặc kết luận `done: true` + `reason` nói rõ không làm được.
+- Hết `{{attempt}}` mà chưa xong thì `index.js` **đi tiếp và ghi cảnh báo**, KHÔNG coi là xong.
+
 ## Variables
 {{step}} — 1 bước trong Steps của test case (ví dụ: "Nhập mã SALE20 vào ô mã giảm giá")
+{{attempt}} — lượt thứ mấy / tối đa mấy lượt cho bước NÀY (ví dụ `2/3`)
+{{da_lam_roi}} — (chỉ có từ lượt 2) các hành động đã thực hiện cho bước này và kết quả `ok`/`LỖI: ...`
 {{page_elements}} — **node đã được lọc** theo nội dung bước đang xử lý, mỗi node 1 dòng: `- textbox "Mã giảm giá" ref=e14`. Đây là cây **accessibility đã parse**, KHÔNG phải HTML — không có tag, không có class. Snapshot đầy đủ đã được ghi ra file và lọc bằng `tools/snapshot-parser.js`, không đưa vào prompt.
 {{available_tools}} — **whitelist 8 tool** liên quan tới điều hướng/tương tác (`WHITELIST` trong `tools/step-planner.js`). `@playwright/mcp` có 60+ tool; nhồi hết vào prompt mỗi bước mỗi test case là chi phí thuần. KHÔNG được chọn tool ngoài danh sách này — `index.js` sẽ **loại bỏ** quyết định dùng tool ngoài whitelist.
 

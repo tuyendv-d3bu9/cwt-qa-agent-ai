@@ -14,7 +14,7 @@ Convention / Registry
 - Một lỗi Severity Critical vẫn có thể Priority Low (ví dụ: crash ở tính năng sắp bị gỡ bỏ); ngược lại 1 lỗi Severity Minor vẫn có thể Priority High (ví dụ: sai chính tả trên trang chủ ngay trước sự kiện marketing lớn). KHÔNG suy Priority trực tiếp từ Severity hay ngược lại.
 - **KHÔNG nhầm với "Priority" của test case** (`memory/semantic/testing-conventions.md`, thang `Critical/High/Medium/Low`) — đó là độ ưu tiên khi THIẾT KẾ test, khác hoàn toàn với Priority của BUG REPORT ở đây (độ ưu tiên khi XỬ LÝ bug đã tìm thấy). Hai khái niệm dùng chung tên field nhưng thang đo và ý nghĩa khác nhau — phải ghi rõ ngữ cảnh khi nhắc tới, không dùng lẫn.
 
-### Environment (mặc định cho Function D)
+### Environment (mặc định)
 `<URL môi trường test — lấy từ cấu hình tầng 2 `base_url`>, trình duyệt Chromium qua MCP Playwright (headless)` — trừ khi `test-results.json` ghi rõ trình duyệt/thiết bị khác, không tự giả định thiết bị/OS ngoài những gì đã chạy thật.
 
 ### Rule bổ sung (từ giáo trình QA Agent Reporter, Mục 1)
