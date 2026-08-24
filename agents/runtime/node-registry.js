@@ -222,3 +222,45 @@ export function resolveArgs(node, { with: withArgs = {}, paths = PATHS } = {}) {
 export async function callNode(node, args) {
     return node.module[node.entry](args);
 }
+
+/**
+ * Những node có đầu vào phụ thuộc (trực tiếp hoặc bắc cầu) vào đầu ra của `name`.
+ *
+ * VÌ SAO CẦN. Người dùng nói *"test case sinh ra dở, làm lại"*. Sinh lại một mình
+ * `qa-test-designer` là chưa đủ: `qa-automation` đã sinh 21 spec TỪ bảng test case cũ, và
+ * `qa-verifier` đã kết luận TRÊN những spec đó. Nếu chỉ đánh lại một bước thì runner bỏ qua
+ * các bước sau (chúng vẫn `done`) → **bảng test case mới đi cùng spec cũ**, và không có gì báo.
+ *
+ * Tính từ `CONTRACT` (`produces` → `requires`), KHÔNG từ một danh sách thứ tự gõ cứng: node
+ * người dùng tự thêm sau này cũng phải được tính đúng mà không ai phải sửa file này.
+ *
+ * @param {string} name
+ * @param {Map<string, object>} nodes  registry từ discoverNodes()
+ * @returns {string[]} tên các node ở hạ nguồn (không gồm chính `name`), thứ tự ổn định
+ */
+export function downstreamOf(name, nodes) {
+    const start = nodes.get(name);
+    if (!start) return [];
+
+    // Bắc cầu: sinh lại designer làm automation cũ → verifier đọc output của automation →
+    // reporter đọc output của verifier. Một vòng lan truyền một tầng là không đủ.
+    const tainted = new Set((start.contract.produces ?? []));
+    const affected = new Set();
+
+    for (let pass = 0; pass < nodes.size + 1; pass++) {
+        let grew = false;
+        for (const node of nodes.values()) {
+            if (node.name === name || affected.has(node.name)) continue;
+            const requires = node.contract.requires ?? [];
+            if (!requires.some(r => tainted.has(r))) continue;
+            affected.add(node.name);
+            for (const p of node.contract.produces ?? []) {
+                if (!tainted.has(p)) { tainted.add(p); grew = true; }
+            }
+            grew = true;
+        }
+        if (!grew) break;
+    }
+
+    return [...affected].sort();
+}

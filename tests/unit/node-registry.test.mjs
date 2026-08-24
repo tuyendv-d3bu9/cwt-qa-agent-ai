@@ -129,6 +129,57 @@ const validate = (contract, module = goodModule, dirName = "qa-x") =>
     chk("qa-leader dùng entry 'runSetup', không phải 'run'", nodes.get("qa-leader")?.entry === "runSetup");
 }
 
+// ─────────── 13. downstreamOf — "test case dở, sinh lại" phải kéo theo hạ nguồn ───────────
+//
+// Sinh lại MỘT bước là chưa đủ: qa-automation đã sinh spec TỪ bảng test case cũ, qa-verifier đã
+// kết luận TRÊN spec đó. Chỉ đánh lại designer thì runner bỏ qua các bước sau (vẫn `done`) →
+// bảng test case MỚI đi cùng spec CŨ, không có gì báo.
+{
+    const mk = (name, requires, produces) => [name, { name, contract: { agent: name, requires, produces, inputs: {} } }];
+    const chain = new Map([
+        mk("qa-a", [], ["a.md"]),
+        mk("qa-b", ["a.md"], ["b.md"]),
+        mk("qa-c", ["b.md"], ["c.md"]),
+        mk("qa-doclap", ["ngoai.md"], ["d.md"]),
+    ]);
+    chk(">>> hạ nguồn tính BẮC CẦU (a → b → c), không chỉ một tầng",
+        JSON.stringify(R.downstreamOf("qa-a", chain)) === JSON.stringify(["qa-b", "qa-c"]),
+        JSON.stringify(R.downstreamOf("qa-a", chain)));
+    chk("node giữa chuỗi chỉ kéo phần sau nó", JSON.stringify(R.downstreamOf("qa-b", chain)) === JSON.stringify(["qa-c"]),
+        JSON.stringify(R.downstreamOf("qa-b", chain)));
+    chk("node cuối chuỗi không có hạ nguồn", R.downstreamOf("qa-c", chain).length === 0);
+    chk(">>> node KHÔNG phụ thuộc thì KHÔNG bị kéo theo (không đánh lại bừa)",
+        !R.downstreamOf("qa-a", chain).includes("qa-doclap"), JSON.stringify(R.downstreamOf("qa-a", chain)));
+    chk("tên node không có trong registry → mảng rỗng, không nổ", R.downstreamOf("khong-co", chain).length === 0);
+}
+{
+    // Hai node cùng đọc một file: cả hai đều là hạ nguồn.
+    const mk = (name, requires, produces) => [name, { name, contract: { agent: name, requires, produces, inputs: {} } }];
+    const fan = new Map([mk("qa-src", [], ["x.md"]), mk("qa-l", ["x.md"], []), mk("qa-r", ["x.md"], [])]);
+    chk("nhiều node cùng phụ thuộc một đầu ra → kéo hết",
+        JSON.stringify(R.downstreamOf("qa-src", fan)) === JSON.stringify(["qa-l", "qa-r"]),
+        JSON.stringify(R.downstreamOf("qa-src", fan)));
+}
+{
+    // Phụ thuộc vòng: không được lặp vô hạn.
+    const mk = (name, requires, produces) => [name, { name, contract: { agent: name, requires, produces, inputs: {} } }];
+    const cyc = new Map([mk("qa-1", ["y.md"], ["x.md"]), mk("qa-2", ["x.md"], ["y.md"])]);
+    chk("phụ thuộc VÒNG không làm treo (có chặn số vòng lặp)",
+        JSON.stringify(R.downstreamOf("qa-1", cyc)) === JSON.stringify(["qa-2"]),
+        JSON.stringify(R.downstreamOf("qa-1", cyc)));
+}
+{
+    // Registry THẬT: chuỗi phải đúng thứ tự nghiệp vụ.
+    const { nodes } = await R.discoverNodes();
+    chk(">>> registry thật: sinh lại qa-test-designer kéo theo automation + verifier + reporter",
+        JSON.stringify(R.downstreamOf("qa-test-designer", nodes)) === JSON.stringify(["qa-automation", "qa-reporter", "qa-verifier"]),
+        JSON.stringify(R.downstreamOf("qa-test-designer", nodes)));
+    chk("registry thật: sinh lại qa-automation KHÔNG kéo qa-test-designer (nó ở thượng nguồn)",
+        !R.downstreamOf("qa-automation", nodes).includes("qa-test-designer"),
+        JSON.stringify(R.downstreamOf("qa-automation", nodes)));
+    chk("registry thật: qa-reporter là cuối, không kéo ai", R.downstreamOf("qa-reporter", nodes).length === 0);
+}
+
 const fail = P.filter(([, c]) => !c);
 P.forEach(([n, c, e]) => console.log(`${c ? "  ok  " : "  FAIL"} ${n}${c ? "" : "   → " + e}`));
 console.log(`\nnode-registry: ${P.length - fail.length}/${P.length}`);

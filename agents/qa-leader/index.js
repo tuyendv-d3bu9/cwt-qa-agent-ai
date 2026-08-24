@@ -538,7 +538,7 @@ export async function distillUiFlows({ docPath = P.UI_FLOW_DOC } = {}) {
         return { status: "skipped", reason: `không đọc được ${docPath}: ${doc.error}`, flows: 0, problems: [] };
     }
 
-    const { flows, problems } = parseUiFlows(doc.content);
+    const { flows, problems, conventions } = parseUiFlows(doc.content);
     for (const p of problems) console.warn(`  [ui-flow] ${p}`);
     if (flows.length === 0) {
         return { status: "skipped", reason: "không tìm thấy flow nào trong tài liệu", flows: 0, problems };
@@ -547,6 +547,26 @@ export async function distillUiFlows({ docPath = P.UI_FLOW_DOC } = {}) {
     const hash = createHash("sha256").update(doc.content).digest("hex").slice(0, 16);
     let sections = 0;
     let components = 0;
+
+    // Mục "Quy ước…" của tài liệu — mang NGUYÊN VĂN vào tầng 3.
+    //
+    // Đây không phải một bước nào, nhưng nó đổi hẳn cách viết automation. Ví dụ thật: "web test
+    // không có DB, vào lại trang là sạch" → **không được điều hướng lại giữa luồng**. Trước khi
+    // có đoạn này, phần đó nằm trong tài liệu mà không tới được prompt của agent nào — đúng loại
+    // lỗi P9 (tài liệu có, không ai nạp).
+    if (conventions) {
+        const res = await storeKnowledgeSection({
+            kind: "uiflow",
+            status: "confirmed",
+            title: "Quy ước nghiệp vụ của app (người dùng xác nhận)",
+            content: conventions,
+            sourceFile: docPath,
+            sourceHash: hash,
+        });
+        if (res.action !== "unchanged") sections++;
+    } else {
+        console.warn(`  [ui-flow] ${docPath} không có mục "## Quy ước…" — không có quy ước nghiệp vụ nào được chưng cất.`);
+    }
 
     for (const flow of flows) {
         // One `###` section per flow. Steps are rendered verbatim — the whole value of this

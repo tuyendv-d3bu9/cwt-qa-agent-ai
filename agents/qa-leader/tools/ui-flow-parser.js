@@ -22,6 +22,21 @@ const STEP_RE = /^\s*(\d+)\s*[.)-]\s+(.+?)\s*$/;
 const HEADING_RE = /^#{1,6}\s+/;
 
 /**
+ * Mục "quy ước nghiệp vụ đã xác nhận" — tuỳ chọn, nhiều nhất một mục.
+ *
+ * VÌ SAO CẦN. Tài liệu luồng còn chứa những điều KHÔNG phải một bước, nhưng đổi hẳn cách viết
+ * automation. Ví dụ thật (người dùng trả lời 2026-08-23): *"web test không có DB, vào lại trang
+ * là sạch"*. Hệ quả là **không được điều hướng lại giữa luồng** — vào lại trang là mất giỏ hàng
+ * vừa dựng. Chính lỗi đó (một rule `navigate` khớp cả câu "Vào checkout" không có URL) là một
+ * trong ba nguyên nhân gốc của 9 test lỗi ngày 2026-08-17.
+ *
+ * Trước khi có phần này, `distillUiFlows()` chỉ mang các khối `## Flow:` vào tầng 3 — nên một
+ * quy ước như trên nằm trong tài liệu mà **không tới được prompt của agent nào**. Đúng loại lỗi
+ * P9: tài liệu có, không ai nạp.
+ */
+const CONVENTION_RE = /^#{1,3}\s*Quy\s*ước\b/i;
+
+/**
  * A step is BUSINESS INTENT, in the author's own words. Nothing here tries to work out
  * which element it refers to.
  *
@@ -68,14 +83,58 @@ export function parseUiFlows(markdown) {
 
     let current = null;
     let inFence = false;
+    /** Đang thu mục "Quy ước…" — thu NGUYÊN VĂN, kể cả code fence, bảng và heading con. */
+    let conventionLines = null;
+    let conventions = null;
+    /** Cấp heading của mục "Quy ước…" (số dấu #). Chỉ heading cấp BẰNG hoặc CAO HƠN mới đóng nó. */
+    let conventionLevel = 0;
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
 
         // Fenced blocks hold EXAMPLES of the format (the document explains itself), so a
         // `## Flow:` in there must not be parsed as a real flow.
-        if (/^\s*```/.test(line)) { inFence = !inFence; continue; }
-        if (inFence) continue;
+        if (/^\s*```/.test(line)) {
+            inFence = !inFence;
+            if (conventionLines) conventionLines.push(line);
+            continue;
+        }
+        if (inFence) {
+            if (conventionLines) conventionLines.push(line);
+            continue;
+        }
+
+        if (CONVENTION_RE.test(line) && !conventionLines) {
+            if (conventions) {
+                problems.push(`Có nhiều hơn một mục "Quy ước…" — chỉ mục đầu tiên được dùng.`);
+            } else {
+                conventionLines = [];
+                conventionLevel = (/^(#+)/.exec(line)?.[1] ?? "##").length;
+            }
+            current = null;
+            continue;
+        }
+        if (conventionLines) {
+            // Chỉ heading cấp BẰNG hoặc CAO HƠN mới đóng mục. Heading CON (`###` dưới một `##`)
+            // là nội dung của mục — bản đầu đóng ngay ở `###` nên chỉ thu được đoạn mở đầu, mất
+            // toàn bộ phần quy ước thật bên dưới.
+            const level = (/^(#+)\s+/.exec(line)?.[1] ?? "").length;
+            if (level > 0 && level <= conventionLevel) {
+                conventions = conventionLines.join("\n").trim() || null;
+                conventionLines = null;
+                // Chính dòng đóng lại là một mục "Quy ước…" nữa → mục thứ hai. Không báo thì nó
+                // bị bỏ qua âm thầm, và người viết tưởng cả hai mục đều được dùng.
+                if (CONVENTION_RE.test(line)) {
+                    problems.push(`Có nhiều hơn một mục "Quy ước…" — chỉ mục đầu tiên được dùng.`);
+                    current = null;
+                    continue;
+                }
+                // KHÔNG `continue` ở đây: dòng này có thể chính là `## Flow:` tiếp theo.
+            } else {
+                conventionLines.push(line);
+                continue;
+            }
+        }
 
         const flow = FLOW_RE.exec(line);
         if (flow) {
@@ -139,7 +198,10 @@ export function parseUiFlows(markdown) {
     }
     if (flows.length === 0) problems.push(`Không tìm thấy flow nào — cần heading dạng "## Flow: <tên>".`);
 
-    return { flows, problems };
+    // Mục quy ước nằm cuối file thì không có heading nào đóng nó — chốt ở đây.
+    if (conventionLines && !conventions) conventions = conventionLines.join("\n").trim() || null;
+
+    return { flows, problems, conventions };
 }
 
 /** The flow a piece of work belongs to: exact name if given, else the first one. */

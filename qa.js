@@ -19,8 +19,8 @@ import { createInterface } from "node:readline/promises";
 import { spawn } from "node:child_process";
 import { loadFlows, renderFlow, listFlowFiles } from "./workflow/flow-file.js";
 import { runFlow } from "./workflow/flow-runner.js";
-import { discoverNodes } from "./agents/runtime/node-registry.js";
-import { approveStep, printState, loadState, currentRun } from "./agents/runtime/memory.js";
+import { discoverNodes, downstreamOf } from "./agents/runtime/node-registry.js";
+import { approveStep, printState, loadState, currentRun, markStep } from "./agents/runtime/memory.js";
 import { supervise } from "./agents/qa-leader/index.js";
 
 const argv = process.argv.slice(2);
@@ -156,6 +156,76 @@ function spawnNode(script, args) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Sinh lại một bước (và mọi bước phụ thuộc nó)
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * "Test case sinh ra dở / code automation sai — làm lại thế nào?"
+ *
+ * Trước lệnh này KHÔNG có cách nào tử tế. `flow-runner` bỏ qua mọi bước `done`, và
+ * `needs_rework` chỉ được đặt tự động khi verifier trả verdict FIX. Người dùng muốn sinh lại
+ * một bước thì chỉ còn hai đường, cả hai đều tệ: `--new-run` (làm lại từ đầu, trả tiền lại cho
+ * cả phần phân tích) hoặc sửa tay SQLite.
+ *
+ * VÀ LỖ THỨ HAI, nặng hơn: đánh lại MỘT bước là chưa đủ. `qa-automation` đã sinh 21 spec TỪ
+ * bảng test case cũ; `qa-verifier` đã kết luận TRÊN những spec đó. Chỉ đánh lại
+ * `qa-test-designer` thì runner bỏ qua các bước sau (vẫn `done`) → **bảng test case mới đi cùng
+ * spec cũ**, và không có gì báo. Nên mặc định là đánh lại CẢ hạ nguồn, tính từ `CONTRACT`.
+ */
+async function cmdRedo(name, { only = false } = {}) {
+    if (!name) {
+        console.error(
+            `\nCần tên node. Ví dụ:\n` +
+            `  node qa.js redo qa-test-designer      # test case dở → sinh lại nó + mọi bước phụ thuộc\n` +
+            `  node qa.js redo qa-automation         # spec/code sai → sinh lại spec + kiểm chứng + báo cáo\n` +
+            `  node qa.js redo qa-automation --only  # CHỈ node đó, giữ nguyên hạ nguồn (hiếm khi đúng)\n`
+        );
+        return 1;
+    }
+
+    const run = await currentRun();
+    if (!run) {
+        console.error(`\nChưa có phiên nào đang mở — không có gì để sinh lại.\n`);
+        return 1;
+    }
+
+    const { nodes } = await discoverNodes();
+    if (!nodes.get(name)) {
+        console.error(`\nKhông có node nào tên "${name}". Đang có: ${[...nodes.keys()].join(", ")}\n`);
+        return 1;
+    }
+
+    const state = await loadState();
+    const has = (agent) => state.steps.some(s => s.agent === agent);
+    if (!has(name)) {
+        console.error(`\nBước "${name}" chưa từng chạy trong phiên này — không có gì để sinh lại.\n`);
+        return 1;
+    }
+
+    // Chỉ đánh lại những bước ĐÃ chạy trong phiên này. Node ở hạ nguồn mà chưa chạy thì để yên:
+    // nó sẽ tự chạy lần đầu theo luồng, không cần đánh dấu.
+    const downstream = only ? [] : downstreamOf(name, nodes).filter(has);
+
+    await markStep(name, { status: "needs_rework", note: `Người dùng yêu cầu sinh lại (${new Date().toISOString().slice(0, 10)})` });
+    for (const d of downstream) {
+        await markStep(d, { status: "needs_rework", note: `Đầu vào đổi: "${name}" được sinh lại` });
+    }
+
+    console.log(`\n>> Đã đánh "${name}" cần sinh lại.`);
+    if (downstream.length) {
+        console.log(`   Kèm ${downstream.length} bước phụ thuộc: ${downstream.join(", ")}`);
+        console.log(`   (đầu ra của chúng dựng trên đầu ra cũ của "${name}" — giữ nguyên là trộn bản mới với bản cũ)`);
+    } else if (only) {
+        console.log(`   --only: KHÔNG đánh hạ nguồn. Đầu ra của các bước sau vẫn dựng trên bản cũ.`);
+    }
+    // Đánh `needs_rework` cũng xoá dấu duyệt (memory.js): duyệt là duyệt MỘT bản đầu ra cụ thể,
+    // bản đó sắp bị thay.
+    console.log(`   Dấu duyệt của các bước trên đã bị xoá — sẽ phải duyệt lại bản mới.`);
+    console.log(`\n   Chạy lại:  node qa.js run full --confirm-mcp\n`);
+    return 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Sinh node mới từ mô tả (P7.5)
 // ─────────────────────────────────────────────────────────────────────
 
@@ -192,7 +262,8 @@ ${HR}
   4) Bảng giám sát MỌI phiên
   5) Liệt kê luồng
   6) Liệt kê node (kèm node hỏng)
-  7) Sinh node mới từ mô tả
+  7) Sinh LẠI một bước (test case dở / spec sai)
+  8) Sinh node mới từ mô tả
   0) Thoát
 ${HR}`;
 
@@ -237,6 +308,13 @@ async function interactive() {
             if (choice === "5") { await cmdFlows(); continue; }
             if (choice === "6") { await cmdNodes(); continue; }
             if (choice === "7") {
+                await cmdNext();
+                const node = (await rl.question("Sinh lại bước nào (tên node): ")).trim();
+                if (!node) { console.log("Bỏ qua."); continue; }
+                await cmdRedo(node);
+                continue;
+            }
+            if (choice === "8") {
                 const desc = (await rl.question("Mô tả node mới (một câu, nói rõ nó ĐỌC gì và GHI gì): ")).trim();
                 if (!desc) { console.log("Bỏ qua."); continue; }
                 await cmdNew(desc);
@@ -267,6 +345,7 @@ node qa.js run <luồng> [đối số...]  chạy một luồng
 node qa.js approve <node> "<tên>"   duyệt một bước (cửa Human-Final)
 node qa.js state                    trạng thái phiên hiện tại + lịch sử
 node qa.js watch                    bảng giám sát MỌI phiên
+node qa.js redo <node> [--only]     sinh LẠI một bước + mọi bước phụ thuộc nó
 node qa.js new "<mô tả>"            sinh node mới từ mô tả  [--dry-run]
 `;
 
@@ -282,6 +361,7 @@ switch (cmd) {
     case "watch": { const out = await cmdSupervise(); code = out.needsHuman.length > 0 ? 2 : 0; break; }
     case "run": code = await cmdRun(rest[0], rest.slice(1)); break;
     case "new": code = await cmdNew(rest.filter(a => !a.startsWith("--")).join(" "), { dryRun: rest.includes("--dry-run") }); break;
+    case "redo": code = await cmdRedo(rest.find(a => !a.startsWith("--")), { only: rest.includes("--only") }); break;
     case "approve": {
         if (!rest[0] || !rest[1]) { console.error(`Cần: node qa.js approve <node> "<tên bạn>"`); code = 1; break; }
         try { await approveStep(rest[0], rest[1]); console.log(`Đã duyệt "${rest[0]}" bởi ${rest[1]}.`); }
