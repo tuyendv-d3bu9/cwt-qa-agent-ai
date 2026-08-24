@@ -176,13 +176,15 @@ qa-agent-ai/
 │   │   ├── ui-flows.md                  # TẦNG 3: luồng nghiệp vụ, chưng cất từ project-docs/03_DEV/UI-flow.md
 │   │   └── manifest.json                # {files: {path: hash}} — hash TỪNG FILE, để biết file nào đã đổi
 │
-├── tests/
+├── tests/                               # SẢN PHẨM cho app đang test — chỉ 2 thư mục này, không gì khác
 │   ├── pages/                           # CODE DÙNG LẠI — Page Object, sinh deterministic từ registry.
 │   │                                    # Locator do Playwright sinh — LLM không viết dòng nào. VẪN COMMIT.
-│   ├── steps/                           # Thư viện step của từng luồng. Viết 1 lần, 21 test case cùng gọi.
-│   ├── run-unit.mjs                     # npm run test:unit — 18 bộ, mỗi bộ MỘT tiến trình riêng
-│   └── unit/                            # 411 test. KHÔNG gọi LLM, KHÔNG gọi MCP thật → chạy offline.
-│                                        # Trước P8 chúng nằm trong thư mục TẠM và mất theo phiên làm việc.
+│   └── steps/                           # Thư viện step của từng luồng. Viết 1 lần, 21 test case cùng gọi.
+│
+├── selftest/                            # CÔNG CỤ phát triển framework — KHÔNG phải sản phẩm.
+│   ├── run-unit.mjs                     # npm run test:unit — 24 bộ, mỗi bộ MỘT tiến trình riêng
+│   └── unit/                            # 558 test. KHÔNG gọi LLM, KHÔNG gọi MCP thật → chạy offline.
+│                                        # Người DÙNG hệ thống không cần chạy; người SỬA framework thì cần.
 │
 ├── .qa-run/                             # TẦNG 4 + 5 — SẢN PHẨM 1 lần chạy, xoá tự do (gitignore: .qa-run/)
 │   ├── runs.db                          # TẦNG 5: phiên chạy + cửa duyệt người + lịch sử NHIỀU run
@@ -205,6 +207,10 @@ qa-agent-ai/
 > **3 ranh giới, không phải 2.** `memory/` = tri thức (commit) · `tests/steps|pages/` = **code dùng
 > lại** (commit) · `.qa-run/` = sản phẩm (gitignore). `tests/` được sinh tự động nhưng vẫn commit vì
 > đó là thứ viết một lần rồi mọi test case cùng gọi — gitignore nó là bỏ mất đúng nửa dùng lại được.
+>
+> **`tests/` chỉ chứa sản phẩm.** Bộ test của chính framework nằm ở `selftest/`, tách hẳn ra. Trước
+> đây hai thứ này ở chung `tests/`, và dòng `tests/` trong `.gitignore` chặn luôn cả `tests/pages|steps`
+> — tức ranh giới giữa ở trên chỉ tồn tại trên giấy, code dùng lại sinh ra là biến mất khỏi git.
 >
 > Mọi đường dẫn trên khai **một chỗ duy nhất**: `agents/runtime/paths.js`. `playwright.config.ts`
 > cũng import từ đó, để runner và agent không thể bất đồng về vị trí `test-results.json`.
@@ -273,7 +279,13 @@ Menu terminal, không cần nhớ lệnh nào khác. Các lệnh con dùng đư�
 | `node qa.js approve <node> "<tên>"` | duyệt một bước (cửa Human-Final) |
 | `node qa.js watch` | bảng giám sát MỌI phiên |
 | `node qa.js new "<mô tả>"` | **sinh một node mới từ mô tả** (`--dry-run` để xem trước) |
-| `npm run test:unit` | 18 bộ test, không gọi LLM, chạy offline |
+
+Chỉ dành cho người **sửa framework**, không phải người dùng hệ thống — nên cố ý không có trong `package.json`:
+
+| Lệnh | Làm gì |
+|---|---|
+| `node selftest/run-unit.mjs` | 24 bộ · 558 test kiểm chính framework. Không gọi LLM, không gọi MCP thật, chạy offline |
+| `node selftest/run-unit.mjs flow-runner` | chỉ chạy bộ có tên khớp — dùng khi đang sửa một file |
 
 `node agents/approve.js` và `node agents/supervise.js` vẫn chạy nguyên — chúng gọi đúng cùng
 một đường code với `qa.js`, không có hành vi nào tồn tại hai bản. Hai script điều phối đánh số

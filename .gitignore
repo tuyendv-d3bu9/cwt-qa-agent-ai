@@ -20,8 +20,8 @@ evidence/
 output/
 .playwright-mcp/
 
+
 tests/*.spec.ts
 tests/data/
-tests/
 
 .claude/

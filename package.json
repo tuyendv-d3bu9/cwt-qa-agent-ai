@@ -11,7 +11,7 @@
     "flows": "node qa.js flows",
     "nodes": "node qa.js nodes",
     "watch": "node qa.js watch",
-    "test:unit": "node tests/run-unit.mjs",
+    "test:unit": "node selftest/run-unit.mjs",
     "models": "node agents/list-models.js",
     "testing": "node agents/testing.js",
     "test:e2e": "playwright test"

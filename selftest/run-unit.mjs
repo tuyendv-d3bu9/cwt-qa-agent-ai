@@ -1,15 +1,4 @@
-// tests/run-unit.mjs
-// Chạy MỌI bộ test trong tests/unit/ và tổng kết.  →  npm run test:unit
-//
-// VÌ SAO CÓ FILE NÀY. Các bộ test này từng nằm trong thư mục tạm của phiên làm việc — chạy
-// được đúng một lần rồi mất. "Hệ thống source code cố định" thì bộ test phải nằm trong repo
-// và chạy được bằng một lệnh, nếu không thì lần sau không ai biết cái gì từng được kiểm.
-//
-// MỖI BỘ MỘT TIẾN TRÌNH RIÊNG, cố ý: có bộ đổi `process.chdir()` sang sandbox tạm để không
-// đụng DB thật. Chạy chung một tiến trình thì bộ đó sẽ kéo cả những bộ sau vào sandbox của nó.
-//
-// KHÔNG bộ nào gọi LLM và KHÔNG bộ nào gọi MCP Playwright thật — đã kiểm. Lệnh này chạy
-// được offline, không tốn token, nên chạy được sau mỗi lần sửa.
+// selftest/run-unit.mjs
 
 import { readdir } from "node:fs/promises";
 import { spawn } from "node:child_process";
