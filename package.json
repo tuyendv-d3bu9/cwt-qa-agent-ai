@@ -3,13 +3,28 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Practical AI for Manual Testers",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
+    "qa": "node qa.js",
+    "flows": "node qa.js flows",
+    "nodes": "node qa.js nodes",
+    "watch": "node qa.js watch",
+    "test:unit": "node selftest/run-unit.mjs",
     "models": "node agents/list-models.js",
-    "testing": "node agents/testing.js"
+    "testing": "node agents/testing.js",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@google/genai": "^2.13.0",
+    "@google/genai": "^2.16.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "dotenv": "^16.4.5"
+    "@playwright/mcp": "^0.0.79",
+    "@playwright/test": "^1.62.1",
+    "dotenv": "^16.6.1",
+    "mammoth": "^1.12.0",
+    "officeparser": "^7.5.1",
+    "playwright": "^1.62.0",
+    "xlsx": "^0.18.5"
   }
 }

@@ -1,0 +1,59 @@
+# flows/verify.flow.yml
+#
+#   node qa.js run verify
+#
+# ĐÃ CÓ kết quả chạy test rồi, chỉ cần kết luận + báo cáo.
+#
+# Dùng khi: spec không đổi, bạn chạy lại `npx playwright test --reporter=json` và muốn xem
+# kết luận mới — không phải explore lại UI và sinh lại spec (bước đó đắt và gọi MCP thật).
+
+name: verify
+title: Kết quả chạy → kết luận → báo cáo
+description: >-
+  Chỉ QA Verifier + QA Reporter. Cần test-results.json và ui-conventions.md đã có sẵn từ
+  một lần chạy qa-automation trước đó.
+# Luồng này TIẾP TỤC một phiên có sẵn, không tự mở phiên: không có phiên thì cũng không có
+# spec nào để mà kiểm chứng.
+requires_run: true
+
+params:
+  - name: report-types
+    kind: list
+    default: daily,narrative
+
+flags:
+  - name: vlm-all
+    note: soi ảnh MỌI test case, không chỉ test fail + test pass High/Critical
+  - name: no-gate
+    note: bỏ cửa duyệt người — chỉ dùng khi demo nhanh
+
+steps:
+  - node: qa-verifier
+    label: Kiểm chứng kết quả chạy
+    wait_for_file: TEST_RESULTS
+    wait_for_hint: npx playwright test --reporter=json
+    gate: qa-automation
+    with:
+      vlmAll: $flag.vlm-all
+    branch_on: verdict
+    branch:
+      - value: PASS
+        action: continue
+      - value: ASK
+        action: stop
+        message: >-
+          Verifier cần người xác nhận. Đọc deliverable-verifier.md — xác định các test
+          BEHAVIOR_MISMATCH/UNCLEAR có phải bug thật không, rồi chạy lại với --report-types=bug.
+      - value: FIX
+        action: rework
+        rework_node: qa-automation
+        rework_note: "Verifier: SPEC_ISSUE — spec lỗi thời so với ui-conventions.md"
+        message: >-
+          Verdict FIX — spec đã lỗi thời so với UI thật. Luồng `verify` không sinh lại spec;
+          chạy `node qa.js run full --confirm-mcp` để qa-automation explore lại.
+
+  - node: qa-reporter
+    label: Viết báo cáo
+    gate: qa-verifier
+    with:
+      reportTypes: $param.report-types

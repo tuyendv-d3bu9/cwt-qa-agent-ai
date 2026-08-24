@@ -1,0 +1,39 @@
+# flows/analyze.flow.yml
+#
+#   node qa.js run analyze "<tên task>"
+#
+# LUỒNG ĐẦU TIÊN NÊN CHẠY khi mới làm quen hệ thống:
+#   - KHÔNG mở trình duyệt, KHÔNG gọi MCP Playwright → chạy được ngay, không rủi ro
+#   - Cho thấy đủ hai thứ quan trọng nhất: hệ thống biết HỎI LẠI khi tài liệu thiếu, và
+#     có một người (bạn) phải DUYỆT trước khi đi tiếp
+#
+# Kết quả: `.qa-run/deliverables/deliverable-analyst.md`
+
+name: analyze
+title: Chỉ phân tích — tài liệu → bản phân tích yêu cầu
+description: >-
+  QA Leader đọc project-docs/, hỏi lại chỗ thiếu, rồi QA Analyst phân tích.
+  Không cần trình duyệt, không gọi MCP.
+requires_run: false
+
+params:
+  - name: task
+    kind: string
+    positional: true
+    note: tên task/feature cần phân tích
+
+flags:
+  - name: new-run
+    note: mở phiên MỚI thay vì tiếp phiên đang mở
+
+steps:
+  - script: workflow/leader-analyst.js
+    label: QA Leader → QA Analyst (hỏi–đáp + review)
+    args:
+      - $param.task
+    pass_flags:
+      - new-run
+    expect_step: qa-analyst
+
+# KHÔNG `finish:` — phiên phải để mở, vì `design` và `full` tiếp tục chính phiên này.
+# Đóng ở đây là buộc người dùng phân tích lại từ đầu khi muốn đi tiếp.
