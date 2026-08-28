@@ -4,4 +4,10 @@ Các mã voucher cố định:
  - HETHAN: Mã giảm giá hết hạn sử dụng
 
  Ở đây cần lưu ý, Có ô điền (placeholder là NHẬP MÃ) và nút Áp dụng
- Hoặc thao tác hover vào các dòng mã giảm sẽ hiển thị nút Nạp mã rồi ấn vào sẽ áp được mã
+
+ [Cập nhật 28/08/2026 — Store v2.0]
+ Ba mã trên vẫn đúng nguyên giá trị và điều kiện tối thiểu.
+ Nhưng cách "hover vào dòng mã giảm để hiện nút Nạp mã" thì KHÔNG CÒN: bảng gợi ý mã và
+ các nút bấm nhanh đã bị tắt trong bản build hiện tại. Chỉ còn một đường áp mã duy nhất là
+ gõ vào ô nhập mã rồi bấm Áp dụng.
+ Chi tiết: 03_DEV/Spec-ShopGo-Store-v2.md mục 6.

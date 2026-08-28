@@ -12,6 +12,7 @@ import { createIssue } from "../runtime/jira-client.js";
 import { verifyAllDrafts, verifyBugDraft } from "./tools/traceability-check.js";
 import { calculateSprintMetrics, getPreviousSprintMetrics, appendSprintMetrics } from "./tools/sprint-metrics-calculator.js";
 import { mapBugDraftToJiraIssue, mapTestCaseToJiraIssue } from "./tools/jira-mapper.js";
+import { exportTestCaseXlsx } from "./tools/testcase-xlsx.js";
 import * as P from "../runtime/paths.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
@@ -64,33 +65,62 @@ async function askLLMChecked(skillText, userText, { selfCheck, label, maxRevisio
 
 // ── Parsers (same conventions as qa-verifier/qa-automation) ──
 /**
- * Verifier's per-test-case table. Its shape grew when the visual channel was added:
- *   TC_ID | expect() | Nhãn | Kênh dùng | Lý do | Ảnh evidence
- * The old destructuring took column 4 as "Note", which is now "Kênh dùng" — so the note
- * shown in reports would have read "functional+visual" instead of the actual reason.
- * Columns are read by position but the count is checked, so a future shape change fails
- * loudly here instead of quietly mislabelling reports.
+ * Verifier's per-test-case table. Its shape grew twice: once when the visual channel was
+ * added (`Kênh dùng`), and again at R1.1/R2.4c (`Kết quả`, `Bước hỏng`).
+ *
+ * Câu chú thích cũ ở đây khai rằng số cột "is checked, so a future shape change fails loudly".
+ * Nó KHÔNG được kiểm — `cellCount` chỉ được gán và không nơi nào đọc. Một bảo vệ được khai mà
+ * không tồn tại còn tệ hơn không khai: người sửa sau tin vào nó. Giờ đã kiểm thật, bên dưới.
  */
+/** Số cột của bảng qa-verifier. Đổi bảng ở qa-verifier thì PHẢI đổi con số này cùng lượt —
+ *  `parseVerifierTable` đọc theo vị trí, nên lệch cột là gán nhầm mọi thứ mà không lỗi.
+ *  TC_ID · expect() · Nhãn · Kênh dùng · Lý do · Ảnh evidence · Kết quả · Bước hỏng */
+const EXPECTED_VERIFIER_COLUMNS = 8;
+
 function parseVerifierTable(verifierMarkdown) {
     const rows = String(verifierMarkdown ?? "").split("\n")
         .filter(l => l.trim().startsWith("|") && !l.includes("---") && !/^\|\s*TC_ID/i.test(l.trim()));
     const parsed = [];
+    const shapeIssues = [];
     for (const l of rows) {
         const cells = l.split("|").map(c => c.trim()).filter((_, i, arr) => i > 0 && i < arr.length - 1);
-        const [TC_ID, Status, Label, Channel, Reason, Evidence] = cells;
+        const [TC_ID, Status, Label, Channel, Reason, Evidence, KetQua, FailedStep] = cells;
         if (!TC_ID || TC_ID === "—") continue;
+
+        // ĐẾM CỘT PHẢI ĐƯỢC KIỂM THẬT.
+        //
+        // Chú thích cũ ở đây tự khai "the count is checked, so a future shape change fails
+        // loudly" — nhưng `cellCount` chỉ được GÁN, không nơi nào đọc. Bảo vệ đó không tồn tại,
+        // và người sửa sau đọc chú thích sẽ tưởng là có. Hậu quả nếu verifier chèn thêm một cột
+        // vào GIỮA: mọi cột sau lệch một ô, `Evidence` nhận câu văn lý do, `file_exists` trả
+        // false, và MỌI bug report ra đời không có ảnh — im lặng.
+        if (cells.length !== EXPECTED_VERIFIER_COLUMNS) {
+            shapeIssues.push(`${TC_ID}: ${cells.length} cột, mong ${EXPECTED_VERIFIER_COLUMNS}`);
+        }
+
         parsed.push({
             TC_ID,
             Status,
             Label: (Label || "").toUpperCase(),
             Channel: Channel ?? null,
             Reason: Reason ?? null,
-            // `\`evidence/TC-x-after.jpg\`` -> evidence/TC-x-after.jpg ; "—" means none
+            // `\`evidence/TC-x/02-ap-ma.jpg\`` -> evidence/TC-x/02-ap-ma.jpg ; "—" means none
             Evidence: Evidence && Evidence !== "—" ? Evidence.replace(/`/g, "").trim() : null,
+            // R1.1 — cột OK/NG. R2.4c — nhãn bước hỏng (cũng là tên file ảnh của bước đó).
+            KetQua: KetQua && KetQua !== "—" ? KetQua : null,
+            FailedStep: FailedStep && FailedStep !== "—" ? FailedStep.replace(/`/g, "").trim() : null,
             // Kept so older callers reading `.Note` still get the meaningful text.
             Note: Reason ?? null,
             cellCount: cells.length,
         });
+    }
+    if (shapeIssues.length) {
+        // Nổ TO thay vì lặng lẽ gán nhầm cột: một báo cáo sai nhãn tệ hơn một lần chạy dừng.
+        throw new Error(
+            `Bảng của qa-verifier sai số cột — qa-reporter đọc theo VỊ TRÍ nên sẽ gán nhầm mọi cột.\n` +
+            shapeIssues.map(s => `  ${s}`).join("\n") +
+            `\n  Sửa bảng ở assembleDeliverable() của qa-verifier, hoặc cập nhật ` +
+            `EXPECTED_VERIFIER_COLUMNS ở đây — CÙNG một lượt.`);
     }
     return parsed;
 }
@@ -284,7 +314,7 @@ async function runLogNarrative({ verifierDeliverable }) {
 export const CONTRACT = {
     agent: "qa-reporter",
     requires: [P.DELIVERABLE_VERIFIER, P.DELIVERABLE_TEST_DESIGNER],
-    produces: [P.DELIVERABLE_REPORTER],
+    produces: [P.DELIVERABLE_REPORTER, P.TESTCASES_XLSX],
     inputs: {
         verifierDeliverableFile: "DELIVERABLE_VERIFIER",
         testCaseFile: "DELIVERABLE_TEST_DESIGNER",
@@ -310,9 +340,37 @@ export async function run({
     const verifierDeliverable = await runTool("read_file", { path: verifierDeliverableFile });
     const testCaseDeliverable = await runTool("read_file", { path: testCaseFile });
     const verifierRows = parseVerifierTable(verifierDeliverable.content);
-    const candidates = verifierRows.filter(r => r.Label === "BEHAVIOR_MISMATCH" || r.Label === "UNCLEAR");
+    // CHECKPOINT_FAILED nằm ở đây, nếu không thì một bug THẬT (hỏng ngay tại bước áp mã, có ảnh
+    // đúng bước làm bằng chứng) sẽ không bao giờ ra bug report. Thêm nhãn vào LABELS mà quên
+    // chỗ này là đúng cái bẫy bảng 11.G của TODO.Update4 nói tới.
+    const candidates = verifierRows.filter(r =>
+        r.Label === "BEHAVIOR_MISMATCH" || r.Label === "UNCLEAR" || r.Label === "CHECKPOINT_FAILED");
 
     const outputFiles = [];
+
+    // ── R1.2e: bản Excel của bảng kết quả ──────────────────────────────
+    //
+    // Nguồn là `testcases-result.md` (do qa-verifier ghi), KHÔNG phải bảng trong
+    // `deliverable-verifier.md`. Hai bảng đó có thể lệch nhau — bảng của verifier chỉ chứa test
+    // case ĐÃ CHẠY, còn file kết quả chứa CẢ BỘ, kể cả những case `N/A`. Gửi ra ngoài nhóm thì
+    // phải là cả bộ, nếu không người nhận đọc "12 dòng" thành "bộ test có 12 case".
+    //
+    // Chưa có file (phiên cũ, hoặc verifier chưa chạy) thì BỎ QUA kèm cảnh báo — không dựng
+    // một file Excel rỗng để trông cho đủ.
+    const resultMd = await runTool("read_file", { path: P.TESTCASES_RESULT });
+    if (resultMd.error) {
+        console.warn(`  [qa-reporter] chưa có ${P.TESTCASES_RESULT} → không xuất Excel.`);
+    } else {
+        const x = await exportTestCaseXlsx({ markdown: resultMd.content });
+        for (const p of x.problems) console.warn(`  [qa-reporter/xlsx] ${p}`);
+        if (x.written) {
+            outputFiles.push(x.path);
+            console.log(`  Excel: ${x.path} (${x.rows} dòng)`);
+        } else {
+            console.warn(`  [qa-reporter] không xuất được Excel — bảng kết quả không đọc được.`);
+        }
+    }
+
     let bugCheck = { ok: true, results: [], issues: [] };
     let bugsText = "";
     let bugDrafts = [];

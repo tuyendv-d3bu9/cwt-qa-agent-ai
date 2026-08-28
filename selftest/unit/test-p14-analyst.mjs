@@ -97,7 +97,24 @@ function fakeLLM(script) {
 {
     const CV = await import(abs("agents/qa-test-designer/tools/coverage-check.js"));
     const CC = await import(abs("agents/qa-analyst/tools/count-check.js"));
-    const real = (await runTool("read_file", { path: ".qa-run/deliverables/deliverable-analyst.md" })).content;
+
+    // Đọc FIXTURE, không đọc .qa-run/deliverables/deliverable-analyst.md nữa.
+    //
+    // Bản cũ đọc thẳng file do chạy pipeline sinh ra. Nó xanh suốt chỉ vì trên máy này tình cờ
+    // còn artefact của lần chạy 2026-08-24. Ngày dọn .qa-run (web đổi sang v2.0) thì read_file
+    // trả về {error} — không ném — nên `.content` là undefined và cả bộ test chết ở
+    // `undefined.split(...)`, cách chỗ sai 2 khung stack. Một bộ unit test không được phụ thuộc
+    // vào việc gần đây có ai chạy pipeline hay chưa.
+    //
+    // Fixture là bản sao NGUYÊN VĂN của chính deliverable thật đó, đã commit — vẫn là "dữ liệu
+    // thật" theo đúng nghĩa ban đầu của test này (markdown do LLM viết, không phải chuỗi tôi tự
+    // bịa cho vừa cả 2 parser), nhưng lần này nằm trong repo.
+    const fixture = "selftest/fixtures/deliverable-analyst.sample.md";
+    const read = await runTool("read_file", { path: fixture });
+    chk("fixture deliverable-analyst đọc được (test này không được phụ thuộc .qa-run)",
+        typeof read.content === "string" && read.content.length > 0, JSON.stringify(read).slice(0, 160));
+    const real = read.content ?? "";
+
     chk(">>> 2 node đếm CÙNG một con số trên cùng dữ liệu thật (trước: 26 vs 0)",
         CV.countAnalystIdeas(real) === CC.countTestIdeas(real).totalIdeas && CV.countAnalystIdeas(real) > 0,
         `designer=${CV.countAnalystIdeas(real)} analyst=${CC.countTestIdeas(real).totalIdeas}`);

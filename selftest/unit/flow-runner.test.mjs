@@ -222,6 +222,33 @@ steps:
     chk("chạy lại không báo lỗi", again.ok === true, JSON.stringify(again.reason));
 }
 
+// ─────────── 4b. `--new-run` THẮNG cái "bỏ qua bước đã xong" ───────────
+//
+// Mục 4 ở trên là hành vi ĐÚNG khi chạy lại y nguyên lệnh cũ. Nhưng nó từng nuốt luôn
+// `--new-run`, biến cờ đó thành cờ chết.
+//
+// Chuyện thật 2026-08-28: web lên bản v2.0, memory chưng cất bị xoá sạch để chưng cất lại từ
+// tài liệu mới. Lệnh mở phiên mới:
+//     node qa.js run analyze "<task mới>" --new-run
+// in đúng một dòng "[1/1] … đã xong — bỏ qua." rồi thoát 0. Không lỗi, không cảnh báo, memory
+// vẫn rỗng. Nguyên nhân: runner đọc trạng thái của PHIÊN ĐANG MỞ thấy `qa-analyst` = done nên
+// bỏ qua bước script — mà bước script ĐÓ mới là chỗ quyết định dùng phiên nào (nó gọi
+// `startRun`). Trả lời "xong chưa" trước khi trả lời "xong ở phiên nào".
+//
+// `leader-analyst.js` xử lý `--new-run` hoàn toàn đúng; nó chỉ không bao giờ được gọi.
+{
+    seed();
+    await run(FLOW_SCRIPT_THEN_NODE("ok.js"), ["Task E", "--no-gate"]);
+    const fresh = await run(FLOW_SCRIPT_THEN_NODE("ok.js"), ["Task E", "--no-gate", "--new-run"]);
+    chk(">>> có --new-run thì bước script PHẢI chạy lại, không được bỏ qua (cờ chết = memory không bao giờ chưng cất lại)",
+        fresh.steps[0]?.action !== "skipped", JSON.stringify(fresh.steps));
+    chk("--new-run không làm luồng báo lỗi", fresh.ok === true, JSON.stringify(fresh.reason));
+    // Không có cờ thì hành vi cũ giữ nguyên — mục 4 vẫn phải đúng.
+    const again = await run(FLOW_SCRIPT_THEN_NODE("ok.js"), ["Task E", "--no-gate"]);
+    chk("không có --new-run thì vẫn bỏ qua như cũ (không đổi hành vi mặc định)",
+        again.steps[0]?.action === "skipped", JSON.stringify(again.steps));
+}
+
 // ─────────── 5. Truyền đối số + cờ xuống script ───────────
 {
     seed();

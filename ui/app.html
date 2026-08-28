@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QA Agent</title>
+<style>
+  :root {
+    --bg:#0f1115; --panel:#171a21; --line:#252a34; --fg:#e6e9ef; --dim:#9aa4b2;
+    --ok:#3fb950; --ng:#f85149; --warn:#d29922; --ask:#a371f7; --acc:#4493f8;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+    font:14px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif; }
+  header { display:flex; align-items:center; gap:16px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:var(--panel); position:sticky; top:0; z-index:5; }
+  header h1 { font-size:15px; margin:0; font-weight:600; letter-spacing:.3px; }
+  nav { display:flex; gap:4px; flex-wrap:wrap; }
+  nav button { background:none; border:1px solid transparent; color:var(--dim);
+    padding:5px 11px; border-radius:6px; cursor:pointer; font-size:13px; }
+  nav button:hover { color:var(--fg); background:#1e222a; }
+  nav button.on { color:var(--fg); background:#232833; border-color:var(--line); }
+  main { padding:16px; max-width:1200px; }
+  section { display:none; } section.on { display:block; }
+  h2 { font-size:15px; margin:0 0 12px; font-weight:600; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    padding:14px; margin-bottom:12px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th,td { text-align:left; padding:7px 9px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--dim); font-weight:500; font-size:12px; }
+  tr.clickable { cursor:pointer; } tr.clickable:hover td { background:#1e222a; }
+  .pill { padding:1px 8px; border-radius:10px; font-size:12px; font-weight:600; white-space:nowrap; }
+  .OK{background:#12331c;color:var(--ok)} .NG{background:#3d1618;color:var(--ng)}
+  .RETEST{background:#3a2d0c;color:var(--warn)} .ASK{background:#2a1f3d;color:var(--ask)}
+  .NA{background:#22262e;color:var(--dim)}
+  label { display:block; margin:9px 0 3px; color:var(--dim); font-size:12px; }
+  input[type=text],select,textarea { width:100%; background:#0d1017; color:var(--fg);
+    border:1px solid var(--line); border-radius:6px; padding:7px 9px; font:inherit; }
+  textarea { min-height:80px; resize:vertical; font-family:ui-monospace,Consolas,monospace; font-size:12px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; } .row > * { flex:1; min-width:170px; }
+  button.act { background:var(--acc); color:#fff; border:0; border-radius:6px;
+    padding:8px 15px; cursor:pointer; font:inherit; font-weight:500; }
+  button.act:hover { filter:brightness(1.12); } button.act[disabled] { opacity:.45; cursor:not-allowed; }
+  button.ghost { background:#232833; color:var(--fg); border:1px solid var(--line); }
+  button.danger { background:#8b1f24; }
+  .check { display:flex; align-items:flex-start; gap:8px; margin:7px 0; }
+  .check input { margin-top:3px; }
+  .danger-box { border:1px solid var(--ng); background:#2a1416; border-radius:6px; padding:9px 11px; margin:9px 0; }
+  pre.log { background:#08090c; border:1px solid var(--line); border-radius:6px; padding:11px;
+    max-height:440px; overflow:auto; font:12px/1.45 ui-monospace,Consolas,monospace; white-space:pre-wrap; }
+  .cmd { margin-top:12px; padding:8px 11px; background:#0d1017; border:1px dashed var(--line);
+    border-radius:6px; color:var(--dim); font:12px ui-monospace,Consolas,monospace;
+    user-select:all; word-break:break-all; }
+  .cmd b { color:var(--fg); font-weight:600; }
+  .shots { display:flex; gap:10px; overflow-x:auto; padding-bottom:6px; }
+  .shot { flex:0 0 210px; }
+  .shot img { width:100%; border:2px solid var(--line); border-radius:6px; display:block; cursor:zoom-in; }
+  .shot.bad img { border-color:var(--ng); }
+  .shot span { font-size:11px; color:var(--dim); display:block; margin-top:4px; word-break:break-all; }
+  .muted { color:var(--dim); } .small { font-size:12px; }
+  .gap { border-top:1px solid var(--line); padding-top:11px; margin-top:11px; }
+  .gap h4 { margin:0 0 5px; font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>QA Agent</h1>
+  <nav id="nav"></nav>
+  <span style="margin-left:auto" class="muted small" id="hint"></span>
+</header>
+
+<main>
+  <section id="s-runs" class="on">
+    <h2>Phiên làm việc</h2>
+    <div class="card"><div id="runs">Đang tải…</div></div>
+    <div class="cmd">Tương đương: <b>node qa.js watch</b> · <b>node qa.js next</b></div>
+  </section>
+
+  <section id="s-run">
+    <h2>Chạy luồng</h2>
+    <div class="card">
+      <div class="row">
+        <div><label>Luồng</label><select id="flow"></select></div>
+        <div><label>Tên task</label><input type="text" id="task" placeholder="ví dụ: ShopGo Store v2.0"></div>
+      </div>
+      <div class="row">
+        <div><label>Test case (--tc)</label><input type="text" id="tc" placeholder="TC-D-001,TC-D-002 hoặc TC-D-001..TC-D-005"></div>
+        <div><label>Bộ đặt sẵn (--suite)</label><input type="text" id="suite" placeholder="smoke | happy | critical"></div>
+      </div>
+      <div class="row">
+        <div><label>Tag (--tags)</label><input type="text" id="tags" placeholder="@Happy Path"></div>
+        <div><label>Priority (--priority)</label><input type="text" id="priority" placeholder="Critical,High"></div>
+      </div>
+
+      <div class="danger-box">
+        <div class="check">
+          <input type="checkbox" id="confirmMcp">
+          <label for="confirmMcp" style="margin:0;color:var(--fg)">
+            <b>--confirm-mcp</b> — sẽ mở <b>TRÌNH DUYỆT THẬT</b> tới <span id="baseUrl">base_url của dự án</span>.
+            <span class="muted">Phải tick lại mỗi lần; giao diện không nhớ hộ.</span>
+          </label>
+        </div>
+      </div>
+      <div class="check"><input type="checkbox" id="newRun"><label for="newRun" style="margin:0">--new-run (mở phiên mới)</label></div>
+      <div class="check"><input type="checkbox" id="vlmAll"><label for="vlmAll" style="margin:0">--vlm-all (soi ảnh mọi test case)</label></div>
+
+      <p><button class="act" id="go">Chạy</button>
+         <button class="act ghost" id="stop" disabled>Dừng</button></p>
+      <div class="cmd" id="cmd">Tương đương: <b>node qa.js run …</b></div>
+    </div>
+    <div class="card"><pre class="log" id="log">(chưa chạy)</pre></div>
+  </section>
+
+  <section id="s-gaps">
+    <h2>Câu hỏi cần trả lời</h2>
+    <div class="card" id="gaps">Đang tải…</div>
+  </section>
+
+  <section id="s-tc">
+    <h2>Test case &amp; kết quả</h2>
+    <div class="card">
+      <div class="row">
+        <div><label>Lọc theo Kết quả</label><select id="fRes"><option value="">(tất cả)</option></select></div>
+        <div><label>Lọc theo Priority</label><select id="fPri"><option value="">(tất cả)</option></select></div>
+      </div>
+      <p class="small muted" id="tcSrc"></p>
+      <div id="tcTable">Đang tải…</div>
+    </div>
+    <div class="cmd">Xuất Excel: <b>node qa.js run full …</b> (qa-reporter ghi ra .qa-run/reports/testcases-result.xlsx)</div>
+  </section>
+
+  <section id="s-ev">
+    <h2>Ảnh theo từng bước</h2>
+    <div class="card">
+      <label>Test case</label>
+      <div class="row"><div><input type="text" id="evTc" placeholder="TC-D-001"></div>
+      <div style="flex:0 0 110px"><button class="act" id="evGo" style="width:100%">Xem</button></div></div>
+      <div id="ev"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const TOKEN = new URLSearchParams(location.search).get("token") || "";
+const api = (p, o = {}) => fetch(p + (p.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(TOKEN),
+  { ...o, headers: { "content-type": "application/json", ...(o.headers || {}) } });
+const post = (p, body) => api(p, { method: "POST", body: JSON.stringify(body) });
+const el = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const TABS = [["s-runs","Phiên"],["s-run","Chạy luồng"],["s-gaps","Câu hỏi"],["s-tc","Test case"],["s-ev","Ảnh bước"]];
+el("nav").innerHTML = TABS.map(([id,label],i)=>`<button data-t="${id}" class="${i?"":"on"}">${label}</button>`).join("");
+el("nav").onclick = (e) => {
+  const t = e.target.dataset.t; if (!t) return;
+  for (const b of el("nav").children) b.classList.toggle("on", b.dataset.t === t);
+  for (const s of document.querySelectorAll("main section")) s.classList.toggle("on", s.id === t);
+  if (t === "s-gaps") loadGaps();
+  if (t === "s-tc") loadTestCases();
+};
+
+// ── Phiên ──
+async function loadRuns() {
+  const r = await (await api("/api/state")).json();
+  if (!r.runs?.length) { el("runs").innerHTML = '<p class="muted">Chưa có phiên nào. Sang tab “Chạy luồng”.</p>'; return; }
+  el("runs").innerHTML = r.runs.map(run => `
+    <div style="margin-bottom:16px">
+      <div><b>${esc(run.feature ?? run.run_id)}</b>
+        <span class="pill ${run.status === "active" ? "ASK" : "NA"}">${esc(run.status)}</span></div>
+      <div class="muted small" style="margin-bottom:5px">${esc(run.run_id)}</div>
+      <table><tr><th>Bước</th><th>Trạng thái</th><th>Kết quả</th><th>Duyệt</th></tr>
+      ${(run.steps ?? []).map(s => `<tr>
+        <td>${esc(s.agent)}</td>
+        <td>${esc(s.status)}</td>
+        <td>${s.output ? `<a href="#" class="open" data-p="${esc(s.output)}">${esc(s.output)}</a>` : "—"}</td>
+        <td>${s.approved_by ? esc(s.approved_by)
+            : (s.status === "done" ? `<button class="act ghost approve" data-n="${esc(s.agent)}">Duyệt</button>` : "—")}</td>
+      </tr>`).join("")}</table>
+    </div>`).join("");
+}
+document.addEventListener("click", async (e) => {
+  const a = e.target.closest("a.open");
+  if (a) { e.preventDefault();
+    const t = await (await api("/api/file?path=" + encodeURIComponent(a.dataset.p))).text();
+    alert(t.slice(0, 4000)); return; }
+  const b = e.target.closest("button.approve");
+  if (b) {
+    // Cửa Human-Final phải ghi được AI đã duyệt — không có tên thì không phải là duyệt.
+    const by = prompt("Tên người duyệt:");
+    if (!by) return;
+    const r = await (await post("/api/approve", { node: b.dataset.n, by })).json();
+    if (r.error) return alert(r.error);
+    setTimeout(loadRuns, 800);
+  }
+});
+
+// ── Chạy luồng ──
+let jobId = null, es = null;
+async function loadFlows() {
+  const r = await (await api("/api/flows")).json();
+  el("flow").innerHTML = (r.flows ?? []).map(f => `<option value="${esc(f.name)}">${esc(f.name)} — ${esc(f.title ?? "")}</option>`).join("");
+  syncCmd();
+}
+function formBody() {
+  return { flow: el("flow").value, task: el("task").value, tc: el("tc").value, suite: el("suite").value,
+    tags: el("tags").value, priority: el("priority").value,
+    confirmMcp: el("confirmMcp").checked, newRun: el("newRun").checked, vlmAll: el("vlmAll").checked };
+}
+function syncCmd() {
+  const b = formBody(); const a = ["run", b.flow];
+  if (b.task) a.push(JSON.stringify(b.task));
+  for (const k of ["tc","suite","tags","priority"]) if (b[k]) a.push(`--${k}=${b[k]}`);
+  if (b.confirmMcp) a.push("--confirm-mcp");
+  if (b.newRun) a.push("--new-run");
+  if (b.vlmAll) a.push("--vlm-all");
+  el("cmd").innerHTML = "Tương đương: <b>node qa.js " + esc(a.join(" ")) + "</b>";
+}
+for (const id of ["flow","task","tc","suite","tags","priority","confirmMcp","newRun","vlmAll"])
+  el(id).addEventListener("input", syncCmd);
+
+el("go").onclick = async () => {
+  el("log").textContent = "";
+  const r = await (await post("/api/run", formBody())).json();
+  if (r.error) { el("log").textContent = r.error; return; }
+  jobId = r.id; el("go").disabled = true; el("stop").disabled = false;
+  es = new EventSource("/api/stream?id=" + jobId + "&token=" + encodeURIComponent(TOKEN));
+  es.onmessage = (ev) => { el("log").textContent += ev.data + "\n"; el("log").scrollTop = el("log").scrollHeight; };
+  es.addEventListener("end", () => { es.close(); el("go").disabled = false; el("stop").disabled = true; loadRuns(); });
+};
+el("stop").onclick = async () => { if (jobId) await post("/api/stop", { id: jobId }); };
+
+// ── Câu hỏi (gap report) ──
+async function loadGaps() {
+  const r = await (await api("/api/gaps")).json();
+  if (!r.markdown) { el("gaps").innerHTML = '<p class="muted">Chưa có câu hỏi nào đang chờ.</p>'; return; }
+  const qs = r.parsed?.questions ?? [];
+  if (!qs.length) { el("gaps").innerHTML = '<pre class="log">' + esc(r.markdown) + "</pre>"; return; }
+  el("gaps").innerHTML = qs.map(q => `
+    <div class="gap"><h4>${esc(q.id)} · ${esc(q.title ?? "")}</h4>
+      <p class="small muted">${esc(q.problem ?? "")}</p>
+      <p class="small"><b>Câu hỏi:</b> ${esc(q.question ?? "")}</p>
+      <textarea data-q="${esc(q.id)}" placeholder="Trả lời…">${esc(q.answer ?? "")}</textarea></div>`).join("")
+    + `<p style="margin-top:14px"><button class="act" id="saveGaps">Lưu câu trả lời</button>
+       <span id="gapMsg" class="small muted"></span></p>`;
+  el("saveGaps").onclick = () => saveGaps(r.markdown);
+}
+async function saveGaps(original) {
+  // Ghi lại ĐÚNG định dạng cũ: chèn câu trả lời vào ngay dưới dòng `**Trả lời:**` của mỗi khối.
+  let out = original;
+  for (const ta of document.querySelectorAll("textarea[data-q]")) {
+    const id = ta.dataset.q, val = ta.value.trim();
+    if (!val) continue;
+    const re = new RegExp("(###[^\\n]*" + id.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&") +
+      "[\\s\\S]*?\\*\\*Trả lời:\\*\\*\\n(?:<!--[\\s\\S]*?-->\\n)?)([\\s\\S]*?)(?=\\n---|\\n### |$)");
+    out = out.replace(re, (_m, head) => head + val + "\n");
+  }
+  const r = await (await post("/api/gaps", { markdown: out })).json();
+  // Ghi xong ĐỌC LẠI: đây là màn hình dễ làm hỏng file nhất.
+  const n = r.parsed?.answered?.length ?? 0, total = r.parsed?.total ?? 0;
+  el("gapMsg").textContent = r.saved ? `Đã lưu — đọc lại thấy ${n}/${total} câu đã trả lời.` : "Lỗi khi lưu.";
+}
+
+// ── Test case + Kết quả ──
+let TC = [];
+async function loadTestCases() {
+  const r = await (await api("/api/testcases")).json();
+  TC = r.rows ?? [];
+  el("tcSrc").textContent = (r.source ? "Nguồn: " + r.source : "") +
+    (r.specOnly ? " — CHƯA có kết quả chạy, đang hiện đặc tả." : "") +
+    ((r.problems ?? []).length ? " ⚠ " + r.problems.join(" ") : "");
+  const uniq = (k) => [...new Set(TC.map(x => x[k]).filter(Boolean))];
+  el("fRes").innerHTML = '<option value="">(tất cả)</option>' + uniq("Kết quả").map(v => `<option>${esc(v)}</option>`).join("");
+  el("fPri").innerHTML = '<option value="">(tất cả)</option>' + uniq("Priority").map(v => `<option>${esc(v)}</option>`).join("");
+  drawTc();
+}
+function drawTc() {
+  const fr = el("fRes").value, fp = el("fPri").value;
+  const rows = TC.filter(r => (!fr || r["Kết quả"] === fr) && (!fp || r.Priority === fp));
+  if (!rows.length) { el("tcTable").innerHTML = '<p class="muted">Không có dòng nào.</p>'; return; }
+  const cols = Object.keys(rows[0]);
+  el("tcTable").innerHTML = `<table><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr>` +
+    rows.map(r => `<tr class="clickable" data-tc="${esc(r.TC_ID)}">` + cols.map(c => {
+      const v = r[c] ?? "";
+      if (c === "Kết quả") return `<td><span class="pill ${v === "N/A" ? "NA" : esc(v).replace(/\s/g, "")}">${esc(v)}</span></td>`;
+      return `<td>${esc(v)}</td>`;
+    }).join("") + "</tr>").join("") + "</table>";
+  for (const tr of el("tcTable").querySelectorAll("tr.clickable"))
+    tr.onclick = () => { el("evTc").value = tr.dataset.tc; showEvidence(); document.querySelector('[data-t="s-ev"]').click(); };
+}
+el("fRes").onchange = drawTc; el("fPri").onchange = drawTc;
+
+// ── Ảnh theo bước ──
+async function showEvidence() {
+  const tc = el("evTc").value.trim(); if (!tc) return;
+  const r = await (await api("/api/evidence?tc=" + encodeURIComponent(tc))).json();
+  const row = TC.find(x => x.TC_ID === tc);
+  const bad = row?.["Ảnh bước lỗi"] || "";
+  if (!r.images?.length) { el("ev").innerHTML = `<p class="muted">Không có ảnh trong ${esc(r.dir)}.</p>`; return; }
+  el("ev").innerHTML =
+    (row ? `<p class="small"><b>Kết quả:</b> <span class="pill ${row["Kết quả"] === "N/A" ? "NA" : esc(row["Kết quả"]).replace(/\s/g,"")}">${esc(row["Kết quả"])}</span>
+      &nbsp; <b>Nhãn:</b> ${esc(row["Nhãn"])} &nbsp; <b>Bước hỏng:</b> ${esc(row["Ảnh bước lỗi"] || "—")}</p>
+      <p class="small muted">${esc(row["Lý do"] ?? "")}</p>` : "") +
+    '<div class="shots">' + r.images.map(i => {
+      const isBad = bad && (bad.includes(i.label) || i.path === bad);
+      return `<div class="shot ${isBad ? "bad" : ""}">
+        <img src="/api/image?path=${encodeURIComponent(i.path)}&token=${encodeURIComponent(TOKEN)}"
+             onclick="window.open(this.src,'_blank')">
+        <span>${esc(i.label)}${isBad ? " ← bước hỏng" : ""}</span></div>`;
+    }).join("") + "</div>";
+}
+el("evGo").onclick = showEvidence;
+
+el("hint").textContent = TOKEN ? "" : "⚠ Thiếu token — mở đúng URL mà `node qa.js ui` đã in ra.";
+loadRuns(); loadFlows();
+setInterval(() => { if (document.querySelector("#s-runs.on")) loadRuns(); }, 5000);
+</script>
+</body>
+</html>

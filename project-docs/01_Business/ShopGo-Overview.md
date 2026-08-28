@@ -23,6 +23,7 @@ ShopGo là một web bán lẻ trực tuyến (general retail) của một khác
 | Actor | Mô tả |
 |---|---|
 | Khách vãng lai (Guest) | Xem sản phẩm, thêm vào giỏ; phải đăng nhập khi thanh toán |
+|  | *Trên web Store v2.0: guest **không xem được cả giỏ hàng**, không riêng gì bước thanh toán — xem `03_DEV/Spec-ShopGo-Store-v2.md` mục 2.1. Dòng này từng bị đề nghị sửa thành "guest thanh toán được" (S24, action A2); đề nghị đó **đã bị huỷ** ở S25.* |
 | Khách hàng (Customer) | Đã đăng ký; có hồ sơ, sổ địa chỉ, Ví ShopGo, lịch sử đơn |
 | Nhân viên CSKH / Admin | Quản lý đơn, mã giảm giá, sản phẩm (back-office) |
 

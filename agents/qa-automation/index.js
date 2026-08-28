@@ -37,6 +37,7 @@ import { parseUiFlows, pickFlow } from "../qa-leader/tools/ui-flow-parser.js";
 import { emitPageObject } from "./tools/page-object-emitter.js";
 import { emitSteps, stepCatalogue } from "./tools/step-emitter.js";
 import { parseFeature, emitSpec, renderFeature } from "./tools/gherkin-codegen.js";
+import { parseFilter, applyFilter, loadSuites } from "../runtime/tc-filter.js";
 import * as P from "../runtime/paths.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
@@ -66,6 +67,9 @@ const stepsFileFor = (flow) => `${P.STEPS_DIR}/${slugForFile(flow?.name)}.steps.
 const STEPS_TO_PAGES_IMPORT = "../pages/app.page";                       // tests/steps/ -> tests/pages/
 const SPEC_TO_STEPS_IMPORT = (flow) => `../../tests/steps/${slugForFile(flow?.name)}.steps`;  // .qa-run/tests/ -> tests/steps/
 const SPEC_TO_DATA_IMPORT = "./data/test-cases.json";                    // .qa-run/tests/ -> .qa-run/tests/data/
+// Helper ảnh bằng chứng (R2.2). Nằm CÙNG thư mục với thư viện step, nên dựng từ cùng một
+// gốc — viết tay đường dẫn lần thứ hai là chỗ để hai đường lệch nhau khi ai đó chuyển thư mục.
+const SPEC_TO_EVIDENCE_IMPORT = "../../tests/steps/_evidence";
 
 /** Flow name -> a safe, ASCII filename component. */
 function slugForFile(name) {
@@ -539,6 +543,7 @@ function compileFeature(parsed, { flow, catalogue, testCase }) {
         testCase,
         stepsImport: SPEC_TO_STEPS_IMPORT(flow),
         dataImport: SPEC_TO_DATA_IMPORT,
+        evidenceImport: SPEC_TO_EVIDENCE_IMPORT,
     });
 
     // A step outside the catalogue is the ONE failure worth spending a revision on: the
@@ -763,7 +768,7 @@ export const CONTRACT = {
     inputs: { testCaseFile: "DELIVERABLE_TEST_DESIGNER" },
 };
 
-export async function run({ testCaseFile }) {
+export async function run({ testCaseFile, tc = "", tags = "", priority = "", suite = "" }) {
     const deliverable = await runTool("read_file", { path: testCaseFile });
     if (deliverable.error) return { status: "error", data: null, error: `Không đọc được ${testCaseFile}: ${deliverable.error}` };
 
@@ -774,9 +779,31 @@ export async function run({ testCaseFile }) {
         console.error(`  [testcase] ${exported.malformed.length} hàng bảng sai số cột, KHÔNG được dùng: ` +
             exported.malformed.map(m => `${m.id ?? "?"}(hàng ${m.row} của bảng, ${m.cellCount}/${m.expected} cột)`).join(", "));
     }
-    const testCases = exported.cases;
-    if (!testCases.length) {
+    const allCases = exported.cases;
+    if (!allCases.length) {
         return { status: "error", data: null, error: "Không parse được test case nào từ bảng 8 trường." };
+    }
+
+    // ── R4 TẦNG 1: lọc TRƯỚC KHI explore ───────────────────────────────
+    //
+    // Đây là tầng tiết kiệm THẬT. `npx playwright test --grep` chỉ lọc lúc CHẠY: 20 spec vẫn
+    // được sinh, MCP vẫn mở trình duyệt 20 lần, tiền LLM vẫn trả đủ. Lọc ở đây thì 3/20 test
+    // case nghĩa là 17 test case còn lại không tốn một lần mở trình duyệt nào.
+    //
+    // Lỗi lọc là DỪNG HẲN, không phải chạy 0 test case: `applyFilter` ném khi không khớp ai.
+    let selection;
+    try {
+        selection = applyFilter(allCases, parseFilter({ tc, tags, priority, suite, suites: await loadSuites() }));
+    } catch (err) {
+        if (err?.name !== "FilterError") throw err;
+        return {
+            status: "error", data: null,
+            error: `${err.message}${err.available ? `\n  Đang có: ${JSON.stringify(err.available)}` : ""}`,
+        };
+    }
+    const testCases = selection.selected;
+    if (selection.skipped.length) {
+        console.log(`  Lọc test case: chạy ${selection.scope} — bỏ qua ${selection.skipped.map(t => t.tcId).join(", ")}.`);
     }
 
     // Which test cases actually need work — decided BEFORE opening a browser.
@@ -932,7 +959,7 @@ export async function run({ testCaseFile }) {
                 out = await authorSpecFor(item.tc, client, registry);
             }
 
-            let check = verifySpec({ tcId: item.tc.tcId, specContent: out.specContent });
+            let check = verifySpec({ tcId: item.tc.tcId, specContent: out.specContent, expectedResult: item.tc.expected });
 
             // A spec that bakes in a transient MCP `ref=` as a selector will never match
             // anything real and just times out at run time — worth ONE retry with the
@@ -945,7 +972,7 @@ export async function run({ testCaseFile }) {
             if (!useFeaturePath && !check.ok && hasEphemeralRefSelector(out.specContent)) {
                 console.warn(`  [${item.tc.tcId}] spec dùng selector "ref=" — thử sinh lại 1 lần với phản hồi lỗi.`);
                 out = await authorSpecFor(item.tc, client, registry, { correction: check.issues.join(" ") });
-                check = verifySpec({ tcId: item.tc.tcId, specContent: out.specContent });
+                check = verifySpec({ tcId: item.tc.tcId, specContent: out.specContent, expectedResult: item.tc.expected });
             }
 
             await runTool("write_file", { path: item.specPath, content: out.specContent });

@@ -22,6 +22,37 @@ Step **không có** trong catalogue → **KHÔNG được viết vào Scenario**
 JSON trả về, để người ta bổ sung. Viết bừa vào Scenario thì `gherkin-codegen.js` sẽ không khớp được
 và **không sinh spec nào cả** cho test case đó.
 
+## ⚠ CHECKPOINT GIỮA LUỒNG — bắt buộc khi Expected Result nêu một trạng thái trung gian
+
+Trong catalogue luôn có một step dựng sẵn:
+
+```
+__checkpoint | "thấy trên màn hình" | kind=assert | needsValue=true
+```
+
+Dùng nó **ngay sau bước tạo ra một trạng thái mà Expected Result có nhắc tới**, với chuỗi cần
+thấy đặt trong ngoặc kép:
+
+```gherkin
+When Nhập mã giảm giá vào ô nhập mã rồi áp dụng "SALE20"
+Then thấy trên màn hình "Đang kích hoạt giảm giá"     ← checkpoint, đỏ NGAY tại đây nếu sai
+And Tiến hành thanh toán
+```
+
+**Vì sao bắt buộc.** Không có checkpoint thì mọi `expect()` dồn xuống cuối spec. Một luồng hỏng
+ở bước 3 vẫn chạy tiếp tới bước 5 — và đó chính là kịch bản đã xảy ra thật: *áp mã không thành
+công, nhưng test vẫn bấm thanh toán, rồi kết luận trên màn hình đơn hàng*. Người đọc báo cáo
+không có cách nào biết mã đã được áp hay chưa.
+
+Có checkpoint thì: test đỏ **đúng tại bước áp mã**, `result.steps[]` ghi tên bước đó, và
+`qa-verifier` chỉ được đúng một tấm ảnh — `evidence/<TC>/03-....jpg`.
+
+**Quy tắc:** Expected Result có chuỗi trong `"ngoặc kép"` → Scenario phải có **ít nhất một**
+checkpoint. `spec-assertion-check.js` kiểm điều này bằng code và trả lại cho bạn sửa nếu thiếu.
+
+Chuỗi trong dấu backtick (`` `VOUCHER_NOT_FOUND` ``) là **mã lỗi API**, không phải text màn hình
+— **đừng** biến nó thành checkpoint.
+
 ## Knowledge Reference
 - `knowledge/oracle-problem.md` — pass/fail CHỈ từ `expect()`; Scenario không quyết định pass/fail.
 - `../../memory/semantic/testing-conventions.md` — định dạng `TC_ID`.

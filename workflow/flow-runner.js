@@ -45,6 +45,12 @@ function spawnScript(script, args) {
  */
 export const NO_GATE_FLAG = "no-gate";
 
+/**
+ * `--new-run` mở PHIÊN MỚI thay vì tiếp phiên đang mở. Script mở phiên (leader-analyst.js) tự
+ * xử lý cờ này, nhưng runner phải BIẾT tới nó — xem chỗ "đã xong thì bỏ qua" bên dưới.
+ */
+export const NEW_RUN_FLAG = "new-run";
+
 /** Kết quả một lần chạy luồng. `stopped` = dừng có chủ ý (chờ người), KHÁC với `ok: false` = sai. */
 const result = (o) => ({ ok: true, stopped: false, reason: null, steps: [], ...o });
 
@@ -124,10 +130,24 @@ export async function runFlow(flow, { argv = [], log = console.log, error = cons
         // ── Đã xong rồi thì bỏ qua: cho phép chạy lại lệnh y nguyên để TIẾP TỤC ──
         // Với bước script thì "đã xong" đo bằng `expect_step`, vì script không phải một node
         // nên nó không có dòng trạng thái riêng trong `run_steps`.
+        //
+        // `--new-run` PHẢI thắng cái skip này, nếu không nó là cờ chết.
+        //
+        // `state` ở đây là trạng thái của PHIÊN ĐANG MỞ. Nhưng bước script của `analyze` chính
+        // là bước QUYẾT ĐỊNH dùng phiên nào (nó gọi startRun). Bỏ qua nó vì "phiên cũ đã done"
+        // là trả lời câu hỏi thứ hai trước khi trả lời câu hỏi thứ nhất — và cấm luôn đường mở
+        // phiên mới, đúng vào lúc người ta cần nhất.
+        //
+        // Gặp thật 2026-08-28: web lên bản v2.0, xoá sạch memory rồi chạy
+        //   node qa.js run analyze "<task mới>" --new-run
+        // Runner in "[1/1] … đã xong — bỏ qua." và không làm gì cả. `leader-analyst.js` xử lý
+        // `--new-run` hoàn toàn đúng (và tên feature cũng đã khác) nhưng KHÔNG BAO GIỜ được gọi.
+        // Nhìn từ ngoài: lệnh thoát 0, không lỗi, memory vẫn rỗng.
         const trackedAgent = step.kind === "script" ? step.expectStep : step.node;
         const existing = stepStatus(trackedAgent);
         const needsRerun = existing?.status === "needs_rework" && step.rerunIfRework;
-        if (existing?.status === "done" && !needsRerun) {
+        const forceNewRun = Boolean(flags[NEW_RUN_FLAG]);
+        if (existing?.status === "done" && !needsRerun && !forceNewRun) {
             log(`${n} ${step.label} đã xong — bỏ qua.`);
             steps.push({ node: trackedAgent, action: "skipped" });
             continue;

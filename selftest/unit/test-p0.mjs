@@ -80,8 +80,28 @@ chk("không có flow nào -> báo rõ", F.parseUiFlows("# chả có gì").proble
 const { readFileSync } = await import("node:fs");
 const real = F.parseUiFlows(readFileSync("project-docs/03_DEV/UI-flow.md", "utf8"));
 chk("UI-flow.md thật: đọc được 2 flow trở lên", real.flows.length >= 2, JSON.stringify(real.flows.map(f => f.name)));
-chk("UI-flow.md thật: luồng 1 có 5 bước, entry đúng", real.flows[0].steps.length === 5 && real.flows[0].entry === "https://cwshopgo.github.io/", real.flows[0].steps.length + " bước");
-chk("UI-flow.md thật: luồng 2 (gỡ mã) 6 bước, kết bằng bước KIỂM TRA", real.flows[1].steps.length === 6 && real.flows[1].steps[5].kind === "check", JSON.stringify(real.flows[1].steps.map(x => x.kind)));
+
+// Bản trước khoá cứng: "luồng 1 có ĐÚNG 5 bước", "luồng 2 là gỡ mã, ĐÚNG 6 bước".
+// Hai câu đó không kiểm tra parser — chúng kiểm tra rằng TÀI LIỆU NGHIỆP VỤ không được đổi.
+// Web lên Store v2.0 (bắt buộc đăng nhập mới xem được giỏ) → tài liệu buộc phải viết lại, và
+// 2 test này đỏ trong khi parser không có gì sai. Sai lầm là neo test vào VỊ TRÍ của flow
+// trong một file mà người ta được phép sửa.
+//
+// Giờ kiểm TÍNH CHẤT — đúng những thứ nếu hỏng thì automation hỏng theo, bất kể web bản nào:
+for (const f of real.flows) {
+    chk(`UI-flow.md thật: flow "${f.name}" có entry hợp lệ`,
+        /^https?:\/\//.test(f.entry ?? ""), String(f.entry));
+    chk(`UI-flow.md thật: flow "${f.name}" có ít nhất 2 bước`,
+        f.steps.length >= 2, f.steps.length + " bước");
+    chk(`UI-flow.md thật: flow "${f.name}" có ít nhất 1 bước KIỂM TRA (không có thì chẳng quan sát được gì)`,
+        f.steps.some(s => s.kind === "check"), JSON.stringify(f.steps.map(s => s.kind)));
+}
+// Ít nhất một bước trong tài liệu thật phải là bước GHÉP 2 ĐỘNG TÁC ("… rồi …").
+// Đây là thứ đã làm cả bộ test "áp mã" chạy mà chưa từng bấm nút áp mã, nên nó phải còn
+// được tập dượt trên tài liệu thật, không chỉ trên chuỗi dựng sẵn ở đầu file.
+chk(">>> UI-flow.md thật: còn ít nhất 1 bước ghép 2 động tác, và parser tách được",
+    real.flows.some(f => f.steps.some(s => (s.parts?.length ?? 1) > 1)),
+    JSON.stringify(real.flows.flatMap(f => f.steps.filter(s => (s.parts?.length ?? 1) > 1).map(s => s.parts))));
 console.log("   [thật] gợi ý tên (có thể rỗng): " + JSON.stringify(F.hintsOf(real.flows[0])));
 console.log("   [thật] problems: " + (real.problems.length ? JSON.stringify(real.problems) : "(không có)"));
 
@@ -133,9 +153,20 @@ console.log("   [thật] problems: " + (real.problems.length ? JSON.stringify(re
         JSON.stringify({ n: real.flows.length, p: real.problems }));
     chk(">>> quy ước thật mang được luật 'không điều hướng giữa luồng' (nguyên nhân gốc của 5 ca timeout 17/08)",
         /không điều hướng lại|TUYỆT ĐỐI không điều hướng/.test(real.conventions ?? ""), String(real.conventions).slice(0, 80));
-    chk("quy ước thật mang được 'web không có database'", /không có database/.test(real.conventions ?? ""));
-    chk("quy ước thật mang được dấu hiệu mã đang áp (Đang kích hoạt + Gỡ mã)",
-        /Đang kích hoạt/.test(real.conventions ?? "") && /Gỡ mã/.test(real.conventions ?? ""));
+    // Hai câu dưới trước đây soi chuỗi của WEB BẢN CŨ: "web không có database" và trạng thái
+    // "Đang kích hoạt giảm giá". Store v2.0 làm cả hai thành sai:
+    //   - v2.0 CÓ lưu trữ: phiên đăng nhập và lịch sử đơn nằm trong localStorage, nên
+    //     "vào lại trang là sạch" chỉ còn đúng với giỏ hàng. Test case cần trạng thái
+    //     "chưa đăng nhập" mà chỉ reload thì sẽ chạy nhầm trên phiên vẫn đang đăng nhập.
+    //   - chuỗi "Đang kích hoạt giảm giá" không còn tồn tại trên UI.
+    // Điều PHẢI giữ là: mục Quy ước vẫn chở được những luật đổi cách viết automation tới prompt
+    // (đúng lỗi P9: luật nằm trong tài liệu mà không tới được agent nào). Nên kiểm Ý, không kiểm
+    // nguyên văn của một phiên bản web.
+    const conv = real.conventions ?? "";
+    chk(">>> quy ước thật nói rõ thứ gì CÒN LẠI sau khi tải lại trang (v2.0: đăng nhập không mất)",
+        /đăng nhập/i.test(conv) && /(KHÔNG sạch|không mất|vẫn còn đăng nhập)/i.test(conv), conv.slice(0, 120));
+    chk("quy ước thật mang được cách nhìn ra mã đang áp hay không",
+        /áp dụng thành công/i.test(conv) && /gỡ mã/i.test(conv));
 }
 
 let bad2 = 0;

@@ -1,101 +1,66 @@
-# Project Knowledge: Decisions Log — Function D
+# Project Knowledge: Decisions Log
 
 ## Type
-Fact / Change History (distilled from `project-docs/06_Communication/`)
+Fact / Change History (chưng cất từ tài liệu giao tiếp của dự án)
 
 ## Content
 
-Chỉ ghi quyết định ĐÃ XÁC NHẬN. Không suy đoán hay tự chọn 1 phía khi còn mâu thuẫn/chưa trả lời — mục "Còn treo" bên dưới liệt kê đúng các điểm này thay vì tự quyết định.
 
-### Đã xác nhận
 
-| Ngày/Sprint | Quyết định | Nguồn |
-|---|---|---|
-| S22 | Bỏ bắt buộc login ở bước checkout để giảm tỉ lệ bỏ giỏ | `project-docs/06_Communication/Bien-ban-Sprint-Planning-S24.md` |
-
-### Còn treo (KHÔNG tự quyết định thay — chờ người dùng trả lời `.qa-run/deliverables/gap-report.md`)
-- **Phiên bản BRD chính thức**: tồn tại `BRD-Promotion-v1.0.md` và `BRD-Promotion-v1.2.md`, chưa xác nhận bản nào là Source of Truth.
-- **Chat log vs API spec**: `06_Communication/Chat-shopgo-checkout.md` thảo luận thay đổi logic checkout, chưa xác nhận đã cập nhật vào `03_DEV/API-spec-voucher-checkout.md` hay chưa.
-- **CR-005**: `06_Communication/CR-005-Mail-thread.md` đề cập thay đổi yêu cầu, chưa có tài liệu BA tương ứng xác nhận đã approve.
-
-Khi người dùng trả lời 3 điểm trên trong `gap-report.md`, lần chưng cất tiếp theo (`qa-leader` skill `02b_project_knowledge_distillation.md`) sẽ cập nhật bảng "Đã xác nhận" — không phải việc của node nào khác tự làm.
-
-### CR-005: Cộng dồn voucher (PA2)
+### Biên bản Sprint Planning S24
 **Trạng thái**: Đã xác nhận
 
-Cho phép tối đa 2 mã trên 1 đơn: 01 mã giảm đơn hàng + 01 mã freeship. Thứ tự tính: giảm tiền hàng -> tính phí ship -> trừ freeship. Mã freeship chỉ trừ tối đa bằng phí ship thực tế.
+Sprint 24 lên scope: CR-005 cộng dồn voucher (PA2), trần giảm tối đa cho mã %, mã first-order-only, quota chiến dịch, fix BUG-1142. Các vấn đề treo: quota chưa rõ thông báo hết quota, quy tắc làm tròn (đang xem xét Math.floor), case đổi giỏ sau áp mã (treo chờ PO), timezone expired_at (treo chờ dev). Nhắc lại S22 từng bỏ bắt buộc login ở checkout (nhưng sau đó đã bị đảo lại ở S25).
+
+*Nguồn: `project-docs/06_Communication/Bien-ban-Sprint-Planning-S24.md`*
+
+### Biên bản Sprint Planning S25
+**Trạng thái**: Đã xác nhận
+
+Bản web test đã lên `ShopGo Store v2.0` (thay đổi lớn, test case cũ làm lại). Các quyết định quan trọng:
+1. **Đảo lại quyết định S22:** Huỷ bỏ việc bỏ login ở checkout. Từ v2.0 bắt buộc đăng nhập mới vào được giỏ hàng và thanh toán (action A2 của S24 bị huỷ).
+2. Phí vận chuyển v2.0 là phẳng 30.000đ, miễn phí từ 200.000đ (tính trước khi trừ voucher), khác biểu phí 5 khu vực.
+3. Case "đổi giỏ sau khi áp mã": xác nhận feature là mã không tự gỡ, phần giảm về 0 và chặn ở nút Đặt hàng (A5 của S24 đóng).
+4. Điểm chưa chốt: Đăng nhập không kiểm tra mật khẩu (chưa rõ bug hay giới hạn demo); tài khoản role `vip` chưa có ưu đãi riêng; mã nhập chữ thường áp được do UI tự uppercase nhưng API phân biệt hoa thường.
+
+*Nguồn: `project-docs/06_Communication/Bien-ban-Sprint-Planning-S25.md`*
+
+### Chuỗi email trao đổi CR-005 (Cộng dồn voucher)
+**Trạng thái**: Đã xác nhận
+
+PO chốt chọn **PA2** cho chiến dịch Back to School:
+1. Cho phép tối đa 2 mã trên 1 đơn: **01 mã giảm đơn hàng + 01 mã freeship**. Không cho 2 mã cùng loại.
+2. Thứ tự tính: giảm tiền hàng → tính phí ship → trừ freeship.
+3. Min order của mã giảm đơn hàng xét theo tiền hàng, chưa gồm phí ship.
+4. Mã freeship chỉ trừ tối đa bằng đúng phí ship thực tế, dư không quy đổi tiền mặt.
+5. Mã dành cho khách mua lần đầu dùng 1 lần duy nhất trên 1 tài khoản.
 
 *Nguồn: `project-docs/06_Communication/CR-005-Mail-thread.md`*
 
-### GAP-001 — Mâu thuẫn phiên bản BRD Khuyến mãi
+### GAP-001 — Mâu thuẫn phiên bản BRD Khuyến mại
 **Trạng thái**: Đã xác nhận
 
-**Câu hỏi:** Phiên bản BRD-Promotion-v1.2.md là phiên bản chính thức thay thế hoàn toàn v1.0 hay cần tham chiếu song song cả hai?
+**Câu hỏi:** Phiên bản BRD-Promotion-v1.2.md hoàn toàn thay thế v1.0.md hay cần tham chiếu song song cả hai phiên bản?
 
-**Trả lời (người dùng xác nhận 2026-08-24):** Dùng phiên bản v1.2
+**Trả lời (người dùng xác nhận 2026-08-28):** Dùng phiên bản v1.2
 
 *Nguồn của vấn đề: `02_BA/BRD-Promotion-v1.0.md` vs `02_BA/BRD-Promotion-v1.2.md`*
 
 *Nguồn: `.qa-run/deliverables/gap-report.md`*
 
-### GAP-002 — Thiếu thông tin đặc tả kỹ thuật và UI cho tính năng Voucher/Checkout
+### GAP-002 — Thiếu thông tin đặc tả kỹ thuật chi tiết cho luồng Checkout và Voucher
 **Trạng thái**: Đã xác nhận
 
-**Câu hỏi:** Các thay đổi trong CR-005 (nếu có) đã được cập nhật hoàn toàn vào API spec và UI flow hiện tại chưa, hay cần bổ sung thêm chi tiết nào?
+**Câu hỏi:** Tài liệu `03_DEV/Spec.md` có cần được cập nhật theo các API spec mới nhất về voucher checkout hay không?
 
-**Trả lời (người dùng xác nhận 2026-08-23):** CHưa được đối chiếu. hãy thự xử lý cho tôi.
+**Trả lời (người dùng xác nhận 2026-08-28):** Cần cập nhật lại
 
-*Nguồn của vấn đề: `02_BA/BRD-Promotion-v1.2.md` vs `03_DEV/API-spec-voucher-checkout.md` & `06_Communication/CR-005-Mail-thread.md`*
-
-*Nguồn: `.qa-run/deliverables/gap-report.md`*
-
-### GAP-001 — Mâu thuẫn phiên bản BRD Khuyến mãi (v1.0 vs v1.2)
-**Trạng thái**: Đã xác nhận
-
-**Câu hỏi:** Phiên bản nào (`v1.0` hay `v1.2`) là tài liệu chính thức cần áp dụng cho hệ thống hiện tại?
-
-**Trả lời (người dùng xác nhận 2026-08-24):** Dùng phiên bản v1.2
-
-*Nguồn của vấn đề: `02_BA/BRD-Promotion-v1.0.md` vs `02_BA/BRD-Promotion-v1.2.md`*
-
-*Nguồn: `.qa-run/deliverables/gap-report.md`*
-
-### GAP-002 — Thiếu tài liệu đặc tả chi tiết cho UI Flow và Spec kỹ thuật
-**Trạng thái**: Đã xác nhận
-
-**Câu hỏi:** Các luồng UI và Spec kỹ thuật này đã được cập nhật theo phiên bản BRD mới nhất chưa?
-
-**Trả lời (người dùng xác nhận 2026-08-24):** Spec.md đã bổ sung các mã voucher cố định.
-file API-spec-voucher-checkout.md hiện tại có thể bỏ qua.
-
-*Nguồn của vấn đề: `03_DEV/UI-flow.md` vs `03_DEV/Spec.md` vs `03_DEV/API-spec-voucher-checkout.md`*
-
-*Nguồn: `.qa-run/deliverables/gap-report.md`*
-
-### GAP-003 — Mâu thuẫn hoặc chưa đồng bộ giữa CR-005 và luồng checkout hiện tại
-**Trạng thái**: Đã xác nhận
-
-**Câu hỏi:** Các yêu cầu trong CR-005 đã được DEV cập nhật vào `API-spec-voucher-checkout.md` chưa?
-
-**Trả lời (người dùng xác nhận 2026-08-24):** File này chưa thực hiện.
-
-*Nguồn của vấn đề: `06_Communication/CR-005-Mail-thread.md` vs `03_DEV/API-spec-voucher-checkout.md`*
-
-*Nguồn: `.qa-run/deliverables/gap-report.md`*
-
-### GAP-002 — Thiếu tài liệu thiết kế giao diện chi tiết cho luồng Checkout & Voucher
-**Trạng thái**: Đã xác nhận
-
-**Câu hỏi:** QA Analyst và Tester sẽ sử dụng tài liệu thiết kế nào làm chuẩn để kiểm thử UI/UX cho tính năng checkout và voucher?
-
-**Trả lời (người dùng xác nhận 2026-08-24):** 03_DEV/UI-flow.md
-
-*Nguồn của vấn đề: `04_Design/UI-note-checkout-voucher.md` vs `03_DEV/UI-flow.md`*
+*Nguồn của vấn đề: `03_DEV/Spec.md` vs `03_DEV/API-spec-voucher-checkout.md`*
 
 *Nguồn: `.qa-run/deliverables/gap-report.md`*
 
 ## Source
-`project-docs/06_Communication/` (toàn bộ), đối chiếu với `.qa-run/deliverables/gap-report.md` (nếu có câu trả lời).
+Xem dòng *Nguồn* của từng mục bên trên.
 
 ## Consumed by
-Chưa có node nào load file này qua `index.js` ở thời điểm 2026-08-17 (bảng "Đã xác nhận" còn quá ngắn để đáng inject vào mọi prompt) — giữ làm nguồn tham chiếu con người + tương lai khi `qa-analyst`/`qa-leader` cần tra cứu quyết định đã chốt.
+Tham chiếu cho người + node phân tích/điều phối khi cần tra quyết định đã chốt.

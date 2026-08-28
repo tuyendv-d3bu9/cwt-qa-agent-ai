@@ -35,3 +35,28 @@ Khu vực Z5 không áp dụng chính sách miễn phí này, khách hàng vẫn
 - Phí vận chuyển được tính sau khi khách hàng chọn địa chỉ giao tại bước Thanh toán.
 - Phí vận chuyển hiển thị riêng một dòng trong khối Tổng kết đơn hàng.
 - Biểu phí có thể thay đổi theo thoả thuận với đối tác vận chuyển; Phòng Vận hành sẽ thông báo trước 15 ngày.
+
+## 5. Phụ lục — áp dụng cho web ShopGo Store v2.0
+
+**Ban hành:** 27/08/2026, theo yêu cầu của QA tại Sprint Planning S25 (mục 3).
+
+Bản web `ShopGo Store v2.0` (https://cwshopgo.github.io/) **chưa nối với biểu phí đối tác** ở mục
+1–3. Bản này dùng một quy tắc rút gọn, và **QA test theo quy tắc rút gọn này**:
+
+| | Mục 1 - 3 (chính sách đầy đủ) | **Store v2.0 (đang chạy)** |
+|---|---|---|
+| Khu vực giao hàng | 5 khu vực Z1 - Z5, phí 20.000đ - 65.000đ | **Không có.** Không có bước chọn địa chỉ. |
+| Phí vận chuyển | Theo khu vực | **Phẳng 30.000đ** |
+| Ngưỡng miễn phí | Từ **800.000đ** (trừ Z5) | **Từ 200.000đ**, không trừ khu vực nào |
+| Phụ phí (cồng kềnh, giao nhanh) | Có | **Không có** |
+
+Hai điểm QA hỏi và đã được Dev Lead xác nhận:
+
+- Ngưỡng là **"từ 200.000đ trở lên"** — đơn đúng 200.000đ **được** miễn phí ship.
+- Ngưỡng tính trên **tiền hàng trước khi trừ mã giảm giá**. Áp mã không làm đơn tụt xuống mức
+  phải trả phí ship.
+
+> Khoảng cách giữa mục 1–3 và mục 5 là **chênh lệch đã biết giữa app demo và chính sách thật**,
+> không phải bug của app. Dự kiến khớp lại ở sprint sau (S24 action B4 trở đi).
+>
+> Chi tiết hành vi: `project-docs/03_DEV/Spec-ShopGo-Store-v2.md` mục 5.

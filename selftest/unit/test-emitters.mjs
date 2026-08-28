@@ -136,12 +136,17 @@ chk("5 bước -> 5 hàm step", se.steps.length === 5, String(se.steps.length));
 // ─────────── catalogue = từ vựng BỊ CHẶN cho Gherkin ───────────
 {
     const cat = SE.stepCatalogue(se);
+    // `stepCatalogue` luôn kèm MỘT step dựng sẵn `__checkpoint` (R2.3a) — nó không đến từ
+    // việc đi luồng, nên đếm số step CÓ CODE phải lọc nó ra. Ý ĐỊNH ca test không đổi.
+    const walked = (cat) => cat.available.filter(s => s.kind !== "assert");
     chk(">>> catalogue liệt kê đúng step CÓ CODE (từ vựng bị chặn cho Gherkin writer)",
-        cat.available.length === 5 && cat.available.every(s => s.name && s.text), JSON.stringify(cat.available.map(s => s.name)));
-    chk("catalogue đánh dấu step nào cần value", cat.available.filter(s => s.needsValue).length === 1);
+        walked(cat).length === 5 && walked(cat).every(s => s.name && s.text), JSON.stringify(cat.available.map(s => s.name)));
+    chk("catalogue đánh dấu step nào cần value", walked(cat).filter(s => s.needsValue).length === 1);
+    chk(">>> catalogue LUÔN có step checkpoint dựng sẵn (R2.3a — assert giữa luồng)",
+        cat.available.some(s => s.kind === "assert"), JSON.stringify(cat.available.map(s => s.kind)));
     const catPartial = SE.stepCatalogue(SE.emitSteps({ flow, visited: visited.slice(0, 2), exported: po.exported }));
     chk("step thiếu được liệt kê riêng ở missing, không trộn vào available",
-        catPartial.missing.length === 2 && catPartial.available.length === 3, JSON.stringify(catPartial));
+        catPartial.missing.length === 2 && walked(catPartial).length === 3, JSON.stringify(catPartial));
 }
 
 // ─────────── accessorFor ───────────

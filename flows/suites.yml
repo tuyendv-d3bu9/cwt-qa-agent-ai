@@ -1,0 +1,37 @@
+# flows/suites.yml
+#
+# BỘ TEST CASE ĐẶT TÊN SẴN — để gõ `--suite=smoke` thay vì nhớ 6 mã TC.
+#
+#   node qa.js run full "<task>" --suite=smoke --confirm-mcp
+#   node qa.js test --suite=happy
+#
+# ⚠ BẮT BUỘC VIẾT KIỂU KHỐI. `agents/runtime/yaml-lite.js` TỪ CHỐI collection inline `{}` / `[]`
+# có chủ ý (xem đầu file đó: "NỔ TO, KHÔNG ĐOÁN"). Viết
+#     smoke: { tc: [TC-D-001] }
+# là file KHÔNG NẠP ĐƯỢC — không phải nạp sai, mà là dừng hẳn kèm số dòng.
+#
+# Mỗi bộ khai ít nhất một trong ba: `tc`, `tags`, `priority`. Khai nhiều thì là GIAO (AND) —
+# `tags: ["@Happy Path"]` cộng `priority: [Critical]` nghĩa là "vừa Happy Path VỪA Critical".
+#
+# Đây là chỗ người QA viết vào mà KHÔNG phải sửa code. Sửa file này không cần chạy lại gì cả.
+
+# Chạy nhanh trước khi bàn giao — vài luồng xương sống, không phủ biên.
+smoke:
+  tc:
+    - TC-D-001
+    - TC-D-002
+
+# Toàn bộ luồng thuận, không có ca lỗi.
+happy:
+  tags:
+    - "@Happy Path"
+
+# Chỉ những gì hỏng thì chặn release.
+critical:
+  priority:
+    - Critical
+
+# Ca hồi quy — bug đã fix, chạy lại để chắc nó không quay lại.
+regression:
+  tags:
+    - "@REGRESSION"

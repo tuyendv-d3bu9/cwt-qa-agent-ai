@@ -6,6 +6,59 @@
 
 const TRIVIAL_ASSERTIONS = [/expect\(true\)\.toBe\(true\)/, /expect\(1\)\.toBe\(1\)/];
 
+/**
+ * Assertion TRÔNG như thật nhưng không kiểm được gì.
+ *
+ * `TRIVIAL_ASSERTIONS` ở trên chỉ bắt hai dạng đồ chơi (`expect(true).toBe(true)`), và điều đó
+ * đủ cho tới khi đo 20 spec sinh ra thật. Trong đó có:
+ *
+ *   expect(soTienTrenTrang).toContain(0)      ← từ "Math.floor"  — trang nào chẳng có số 0
+ *   expect(soTienTrenTrang).toContain(1)      ← từ "01 mã"
+ *   expect(soTienTrenTrang).toContain(-1163)  ← từ "BUG-1163"    — mã số bug đọc thành tiền
+ *   expect(page.getByText("<35 từ>"))         ← cả câu Expected Result — LUÔN ĐỎ
+ *
+ * Cả bốn đều được `countRealAssertions()` đếm là assertion THẬT, nên `verifySpec()` báo OK cho
+ * một spec không kiểm gì cả — cửa kiểm xanh cho cửa kiểm giả. Nguồn sinh ra chúng đã được sửa
+ * (gherkin-codegen.js, R2.3c/d), nhưng cửa kiểm phải bắt được chúng ĐỘC LẬP với nơi sinh:
+ * đó là toàn bộ lý do file này tồn tại (xem chú thích đầu file).
+ *
+ * Ngưỡng 1000 giống bên gherkin-codegen: dưới đó mà không có đơn vị tiền thì là số đếm.
+ */
+const HOLLOW_ASSERTION_RULES = [
+    {
+        name: "số-đếm",
+        test: (c) => {
+            const m = /\.toContain\(\s*(-?\d+(?:\.\d+)?)\s*\)/.exec(c);
+            return m !== null && Math.abs(Number(m[1])) < 1000;
+        },
+        why: (c) => `\`${c.trim().slice(0, 60)}\` — số |x| < 1000 không kèm đơn vị tiền là số đếm, trang nào cũng có → LUÔN XANH.`,
+    },
+    {
+        name: "số-âm",
+        test: (c) => /\.toContain\(\s*-\d+\s*\)/.test(c),
+        why: (c) => `\`${c.trim().slice(0, 60)}\` — số âm gần như chắc chắn là mã định danh bị đọc thành tiền (BUG-1163 → -1163).`,
+    },
+    {
+        name: "cả-đoạn-văn",
+        test: (c) => {
+            const m = /getByText\(\s*(["'])((?:\\.|(?!\1).)*)\1/.exec(c);
+            return m !== null && m[2].length > 60;
+        },
+        why: () => `assert nguyên một đoạn văn dài — không trang nào in cả câu Expected Result → LUÔN ĐỎ. Đặt câu thông báo NGƯỜI DÙNG THẤY vào "ngoặc kép" trong Expected Result.`,
+    },
+];
+
+/** Các assertion rỗng ruột trong một spec, kèm lý do đọc được. */
+export function hollowAssertions(specContent) {
+    const out = [];
+    for (const call of findAssertionCalls(specContent)) {
+        for (const rule of HOLLOW_ASSERTION_RULES) {
+            if (rule.test(call)) { out.push({ rule: rule.name, call, why: rule.why(call) }); break; }
+        }
+    }
+    return out;
+}
+
 // `ref=eN` (or `[ref="eN"]`) is the accessibility-tree handle Playwright MCP hands out
 // for ONE snapshot — see agents/qa-automation/knowledge/mcp-cost-optimization.md, "ref
 // transient" trap. It is not a real DOM/HTML attribute. On a real run, the spec-generator
@@ -119,9 +172,19 @@ function findAssertionCalls(specContent) {
     return found;
 }
 
-/** Count non-trivial expect() calls in a spec file's content */
+/**
+ * Count non-trivial expect() calls in a spec file's content.
+ *
+ * "Rỗng ruột" bị trừ ra CÙNG với "tầm thường": một spec chỉ có `toContain(0)` phải đếm là 0,
+ * nếu không thì `verifySpec()` báo "có 1 assertion" và cửa kiểm cho qua đúng thứ nó tồn tại
+ * để chặn.
+ */
 export function countRealAssertions(specContent) {
-    return findAssertionCalls(specContent).filter(c => !TRIVIAL_ASSERTIONS.some(t => t.test(c))).length;
+    const hollow = new Set(hollowAssertions(specContent).map(h => h.call));
+    return findAssertionCalls(specContent)
+        .filter(c => !TRIVIAL_ASSERTIONS.some(t => t.test(c)))
+        .filter(c => !hollow.has(c))
+        .length;
 }
 
 /** True if the spec takes a screenshot but never asserts anything */
@@ -130,13 +193,57 @@ export function isScreenshotOnly(specContent) {
 }
 
 /**
+ * Expected Result nói tới một TRẠNG THÁI TRUNG GIAN — tức là có thứ cần kiểm ở GIỮA luồng,
+ * không phải chỉ ở cuối.
+ *
+ * Nhận diện bằng chuỗi UI đặt trong ngoặc kép: đó là cách bảng test case thật đang được viết
+ * ("hiển thị trạng thái "Đang kích hoạt giảm giá"", "thông báo "Mã không hợp lệ""). Chuỗi
+ * trong dấu backtick là mã lỗi API, KHÔNG phải text màn hình — cùng ranh giới mà
+ * `assertableTexts()` bên gherkin-codegen dùng.
+ *
+ * Cố ý HẸP. Một cửa gác báo oan bên trong vòng lặp agent sẽ đốt hết ngân sách sửa cho một lỗi
+ * không tồn tại — đúng chuyện đã xảy ra với `countRealAssertions` (báo "không có expect()" cho
+ * 20/21 spec thật). Nên chỉ đòi checkpoint khi Expected Result THẬT SỰ nêu một chuỗi UI.
+ */
+export function needsCheckpoint(expectedResult) {
+    return [...String(expectedResult ?? "").matchAll(/["“]([^"“”]{2,60})["”]/g)]
+        .map(m => m[1].trim())
+        .filter(s => s && !/^[A-Z0-9_]+$/.test(s) && /[\p{L}]/u.test(s));
+}
+
+/**
+ * Spec có đặt `expect()` ở GIỮA luồng không, hay dồn hết xuống cuối.
+ *
+ * Dò khối `withShot(page, tc.tcId, N, '<nhãn>', async () => { … expect( … })` — hình dạng mà
+ * `emitSpec()` sinh cho step `kind: "assert"`. Quét thô theo khối là đủ: đây là code SINH RA,
+ * hình dạng cố định, không phải code người viết tay.
+ *
+ * Bản đầu dò `test.step(` tường minh. Nhưng checkpoint đi qua `withShot` (chính `withShot` gọi
+ * `test.step` bên trong), nên chuỗi đó không còn trong spec — cửa kiểm sẽ từ chối MỌI spec có
+ * checkpoint hợp lệ. Một cửa gác báo oan trong vòng lặp agent đốt sạch ngân sách sửa cho một
+ * lỗi không tồn tại; đúng chuyện `countRealAssertions` đã làm với 20/21 spec thật.
+ */
+export function hasMidFlowCheckpoint(specContent) {
+    return /withShot\([^)]*?,\s*async[\s\S]{0,400}?\bexpect\s*\(/.test(String(specContent ?? ""));
+}
+
+/**
  * Verify one generated spec file against the oracle-problem.md hard rule.
+ * @param {{tcId: string, specContent: string, expectedResult?: string|null}} o
+ *   `expectedResult` — khi có, bật thêm luật checkpoint (R2.3b). Bỏ trống thì luật đó không
+ *   chạy, để mọi nơi gọi cũ không bị báo oan hàng loạt.
  * @returns {{ ok: boolean, tcId: string, assertionCount: number, issues: string[] }}
  */
-export function verifySpec({ tcId, specContent }) {
+export function verifySpec({ tcId, specContent, expectedResult = null }) {
     const assertionCount = countRealAssertions(specContent);
     const issues = [];
 
+    // Nêu assertion rỗng ruột TRƯỚC câu "không có assertion nào": một spec có 3 dòng
+    // `expect(...)` mà bị báo "không có assertion nào" thì người đọc tưởng cửa kiểm hỏng.
+    // Phải nói rõ nó CÓ, nhưng không kiểm được gì, và vì sao.
+    for (const h of hollowAssertions(specContent)) {
+        issues.push(`${tcId}: assertion rỗng ruột (${h.rule}) — ${h.why}`);
+    }
     if (assertionCount === 0) {
         issues.push(`${tcId}: không có expect() assertion nào không tầm thường.`);
     }
@@ -149,6 +256,20 @@ export function verifySpec({ tcId, specContent }) {
     if (hasEphemeralRefSelector(specContent)) {
         issues.push(`${tcId}: dùng selector chứa "ref=" (mã tham chiếu snapshot MCP, KHÔNG phải attribute HTML thật) — sẽ không bao giờ khớp, chạy sẽ timeout. Xem knowledge/mcp-cost-optimization.md.`);
     }
+    // R2.3b — Expected Result nêu một trạng thái TRUNG GIAN thì phải có checkpoint ở giữa luồng.
+    //
+    // Không có checkpoint thì mọi assertion dồn xuống cuối, và một luồng hỏng ở bước 3 vẫn chạy
+    // tiếp tới bước 5 — đúng kịch bản "áp mã không thành công nhưng vẫn thanh toán thành công".
+    // Kiểm bằng CODE chứ không bằng câu nhắc trong prompt: luật sống trong prompt là luật không
+    // tồn tại (bài học P4).
+    const wantCheckpoints = needsCheckpoint(expectedResult);
+    if (wantCheckpoints.length && !hasMidFlowCheckpoint(specContent)) {
+        issues.push(
+            `${tcId}: Expected Result nêu trạng thái trung gian (${wantCheckpoints.map(w => `"${w}"`).join(", ")}) ` +
+            `nhưng spec KHÔNG có checkpoint nào giữa luồng — mọi assertion dồn xuống cuối. ` +
+            `Thêm vào .feature một step \`Then thấy trên màn hình "<chuỗi>"\` ngay sau bước tạo ra trạng thái đó.`);
+    }
+
     if (hasMarkdownWrapper(specContent)) {
         issues.push(`${tcId}: file còn code fence \`\`\` hoặc câu văn giải thích trước "import" — đây phải là file .ts chạy được, không phải câu trả lời chat. Trả về CHỈ code, không bọc markdown, không mở đầu bằng lời dẫn.`);
     }

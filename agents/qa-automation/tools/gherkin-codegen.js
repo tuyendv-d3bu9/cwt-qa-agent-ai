@@ -17,6 +17,10 @@
 // down to an ordinary Playwright spec — reporter, trace and JSON output all unchanged.
 
 import { moneyIn } from "../../runtime/money.js";
+// Khoá nối giữa tiêu đề `test.step` (vào test-results.json) và tên file ảnh. MỘT nguồn duy
+// nhất: tự ghép chuỗi ở đây lần thứ hai là chỗ để hai bên lệch nhau, và lệch thì verifier có
+// nhãn bước hỏng nhưng không tìm ra ảnh — rồi im lặng kết luận bằng ảnh cuối như cũ.
+import { stepShotLabel } from "../../runtime/paths.js";
 
 const FEATURE_RE = /^\s*Feature\s*:\s*(.+?)\s*$/i;
 const SCENARIO_RE = /^\s*(Scenario|Scenario Outline)\s*:\s*(.+?)\s*$/i;
@@ -114,6 +118,119 @@ export function matchStep(stepText, available) {
     return { step: null, why: `không có step nào trong catalogue khớp` };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// R2.3c/d — CHỌN cái gì trong Expected Result đáng biến thành assertion
+//
+// VÌ SAO CÓ PHẦN NÀY. Bản trước gọi thẳng `moneyIn(expected)` rồi assert MỌI con số nó trả
+// về. `moneyIn()` không sai — nó được viết để SO tiền, không phải để CHỌN số nào là tiền
+// (memory/semantic/money-comparison.md, tier 1, dùng cho mọi dự án). Nhưng dùng nó ở đây thì
+// mọi cụm chữ số trong câu văn đều thành assertion. Đo trên 20 spec sinh ra thật:
+//
+//   toContain(-1163) / (-1171) / (-1150)   ← "BUG-1163", "BUG-1171", "BUG-1150"  (mã số bug)
+//   toContain(404) / toContain(400)        ← "HTTP 400/404"                       (mã HTTP)
+//   toContain(20)                          ← "giảm 20%"                           (phần trăm)
+//   toContain(59)                          ← "23:59:59"                           (giây)
+//   toContain(0) ×4, toContain(1) ×4       ← "Math.floor", "01 mã", "1 giây"       (LUÔN XANH)
+//
+// Và nhánh dự phòng `getByText(<cả đoạn Expected Result>)` (8/20 spec) LUÔN ĐỎ: không trang
+// nào in nguyên một câu 35 từ.
+//
+// Nên hệ thống vừa false-green vừa false-red cùng lúc — đúng hai thứ oracle-problem.md tồn
+// tại để chặn. Ba tầng dưới đây thay cho một lời gọi `moneyIn()` trần.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Những vùng KHÔNG được quét tìm tiền. Thay bằng dấu cách (giữ nguyên độ dài) thay vì xoá,
+ * để các mẫu sau không dính nhau: "BUG-1163và" không được phép thành một token mới.
+ */
+const NON_MONEY_SPANS = [
+    // Token định danh có gạch nối/gạch dưới: BUG-1163, TC-D-012, VOUCHER_NOT_FOUND,
+    // min_order_value, first-order-only. Đây là mẫu CHUNG, không phải danh sách mã của dự án
+    // này — dự án khác đặt tên khác vẫn vào đúng khuôn.
+    /\b[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)+\b/g,
+    // Mã HTTP: "HTTP 400/404", "HTTP 200".
+    /\bHTTP\s*\d{3}(?:\s*\/\s*\d{3})*/gi,
+    // Giờ/phút/giây: 23:59:59, 00:00.
+    /\b\d{1,2}:\d{2}(?::\d{2})?\b/g,
+    // Phần trăm: "20%", "20 %".
+    /-?\d[\d.,]*\s*%/g,
+];
+
+/** Đơn vị tiền đứng ngay sau con số. Không ưu tiên tiền tệ nào — thêm đơn vị khác vào đây. */
+const CURRENCY_AFTER = /^\s*(?:đ|₫|vnd|đồng|d\b)/i;
+
+/**
+ * Số tiền trong Expected Result mà assert được.
+ *
+ * Nhận khi: có đơn vị tiền ngay sau (`200.000đ`), HOẶC giá trị ≥ 1000 (`subtotal = 200.000`).
+ * Ngưỡng 1000 không phải con số đẹp — nó là ranh giới dưới của một khoản tiền VND có nghĩa.
+ * Dưới ngưỡng mà không có đơn vị thì gần như chắc chắn là số đếm ("01 mã", "1 giây"), và
+ * assert nó là dựng một cửa kiểm LUÔN XANH.
+ *
+ * @returns {number[]} theo thứ tự xuất hiện, đã khử trùng lặp
+ */
+export function assertableAmounts(expected) {
+    let masked = String(expected ?? "");
+    for (const re of NON_MONEY_SPANS) {
+        masked = masked.replace(re, (m) => " ".repeat(m.length));
+    }
+
+    const out = [];
+    for (const m of masked.matchAll(/-?\d[\d.,]*/g)) {
+        const raw = m[0].replace(/[.,]+$/, "");
+        const value = moneyIn(raw)[0];
+        if (!Number.isFinite(value)) continue;
+        const hasUnit = CURRENCY_AFTER.test(masked.slice(m.index + m[0].length));
+        if (!hasUnit && Math.abs(value) < 1000) continue;
+        if (!out.includes(value)) out.push(value);
+    }
+    return out;
+}
+
+/**
+ * Chuỗi UI mà tác giả test case đã ĐẶT TRONG NGOẶC KÉP — thứ thật sự hiện trên màn hình.
+ *
+ * Phân biệt có chủ ý:
+ *   "Đang kích hoạt giảm giá"   → text người dùng NHÌN THẤY        → assert được
+ *   `VOUCHER_NOT_FOUND`         → mã lỗi API, trong dấu backtick   → KHÔNG assert trên UI
+ *
+ * Ranh giới đó không phải tôi đặt ra — nó là cách bảng test case đang được viết thật
+ * (xem Expected Result của TC-D-001, TC-D-006, TC-D-008). Backtick dành cho mã, ngoặc kép
+ * dành cho text màn hình.
+ *
+ * @returns {string[]} theo thứ tự xuất hiện, đã khử trùng lặp
+ */
+export function assertableTexts(expected) {
+    const out = [];
+    for (const m of String(expected ?? "").matchAll(/["“]([^"“”]{2,60})["”]/g)) {
+        const s = m[1].trim();
+        if (!s) continue;
+        // Toàn chữ HOA + số + gạch dưới = mã (SALE20, VOUCHER_NOT_FOUND), không phải câu UI.
+        if (/^[A-Z0-9_]+$/.test(s)) continue;
+        // Phải có ít nhất một chữ cái — "123" trong ngoặc kép không phải câu thông báo.
+        if (!/[\p{L}]/u.test(s)) continue;
+        if (!out.includes(s)) out.push(s);
+    }
+    return out;
+}
+
+/**
+ * Slug dùng cho TÊN ẢNH và TIÊU ĐỀ `test.step` của một bước.
+ *
+ * Lấy từ tên hàm step (`step3_nhapMaGiamGiaVaoO` → `nhap-ma-giam-gia-vao-o`) chứ không lấy từ
+ * câu Gherkin: tên hàm đã được `toStepName()` chuẩn hoá về ASCII và đã ổn định qua các lần
+ * sinh, còn câu Gherkin do LLM viết nên đổi chữ là đổi tên file ảnh.
+ */
+export function slugForShot(fnName, n) {
+    const body = String(fnName ?? "").replace(/^step\d+_/, "");
+    const slug = body
+        .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+    return slug || `buoc-${n}`;
+}
+
 /**
  * Compile one scenario into a Playwright spec.
  *
@@ -128,7 +245,29 @@ export function matchStep(stepText, available) {
  *   than one with the failing step commented out. A spec that silently skips its own
  *   middle still goes green, which is worse than no spec.
  */
-export function emitSpec({ scenario, catalogue, testCase, stepsImport = "../../tests/steps/flow.steps", dataImport = "./data/test-cases.json" }) {
+/**
+ * Tham số tag của `test()`, dựng từ tag Gherkin có sẵn (R4.1c).
+ *
+ * Playwright đòi tag bắt đầu bằng `@` và KHÔNG chứa khoảng trắng — `@Happy Path` trong
+ * `.feature` phải thành `@Happy-Path`, nếu không Playwright bỏ qua phần sau dấu cách và
+ * `--grep @Happy-Path` không khớp gì. Đây là chỗ im lặng hỏng nếu chỉ chép nguyên văn.
+ *
+ * Trả về chuỗi rỗng khi không có tag nào → `test('...', async ...)` như cũ.
+ */
+export function playwrightTags(scenario, identity = null) {
+    const raw = [...(scenario?.tags ?? [])];
+    if (identity) raw.push(`identity:${identity}`);
+    const tags = [...new Set(
+        raw.map(t => "@" + String(t).replace(/^@/, "").trim().replace(/\s+/g, "-")).filter(t => t.length > 1)
+    )];
+    if (!tags.length) return "";
+    return `, { tag: [${tags.map(t => JSON.stringify(t)).join(", ")}] }`;
+}
+
+export function emitSpec({ scenario, catalogue, testCase, identity = null,
+    stepsImport = "../../tests/steps/flow.steps",
+    dataImport = "./data/test-cases.json",
+    evidenceImport = "../../tests/steps/_evidence" }) {
     const unmatched = [];
     const calls = [];
 
@@ -142,7 +281,11 @@ export function emitSpec({ scenario, catalogue, testCase, stepsImport = "../../t
 
     const tcId = scenario.tcId ?? testCase?.tcId ?? "UNKNOWN";
     const expected = String(testCase?.expected ?? "").trim();
-    const used = [...new Set(calls.map(c => c.fn))];
+    // Checkpoint (`kind: "assert"`) KHÔNG phải một hàm trong thư viện step — nó biên dịch thành
+    // `expect()` tại chỗ. Để nó lọt vào danh sách import là sinh ra `import { __checkpoint }`,
+    // một tên không ai export, và cả spec chết ở dòng import với lỗi chẳng liên quan gì tới
+    // nguyên nhân.
+    const used = [...new Set(calls.filter(c => c.kind !== "assert").map(c => c.fn))];
 
     const lines = [
         `// SINH TỰ ĐỘNG từ .feature bởi agents/qa-automation/tools/gherkin-codegen.js.`,
@@ -153,43 +296,98 @@ export function emitSpec({ scenario, catalogue, testCase, stepsImport = "../../t
         ``,
         `import { test, expect } from '@playwright/test';`,
         `import dataset from '${dataImport}' with { type: 'json' };`,
+        `import { withShot, shot } from '${evidenceImport}';`,
         `import { openEntry${used.length ? ", " + used.join(", ") : ""} } from '${stepsImport}';`,
         ``,
         `const tc = dataset.cases.find(c => c.tcId === '${tcId}')!;`,
         ``,
-        `test.afterEach(async ({ page }) => {`,
-        `  await page.waitForTimeout(500);`,
-        `  await page.screenshot({ path: \`.qa-run/evidence/\${tc.tcId}-after.jpg\`, type: 'jpeg', quality: 60, scale: 'css' });`,
-        `});`,
-        ``,
-        `test('${tcId}: ${(scenario.name || "").replace(/'/g, "\\'")}', async ({ page }) => {`,
+        // TAG TƯ CÁCH (R6). `playwright.config.ts` lọc test về đúng project bằng
+        // `grep: /@identity:<tên>\b/` trên TIÊU ĐỀ test — nên tag phải nằm trong tiêu đề, không
+        // phải trong chú thích. Dự án không khai tư cách thì `identity` là null và tiêu đề y
+        // như trước.
+        //
+        // ⚠ Khai tư cách rồi mà spec KHÔNG có tag thì nó rơi ra ngoài mọi project và Playwright
+        // báo "0 test" — im lặng, không lỗi. `untaggedSpecs()` trong identity-plan.js là cửa
+        // chặn cho đúng chuyện đó.
+        // TAG PLAYWRIGHT (R4.1c). `.feature` đã có sẵn `@TC-D-001 @Critical` — dùng lại nguyên
+        // xi, không phát minh bộ tag thứ hai. Nhờ vậy `npx playwright test --grep @Critical`
+        // chạy được ngay, không cần một lớp bọc dịch qua dịch lại.
+        //
+        // Tag nằm ở THAM SỐ THỨ HAI của `test()` (Playwright >= 1.42), khác với tag tư cách ở
+        // trong tiêu đề: `grep` khớp cả hai, nhưng tag ở tham số hiện ra trong report và lọc
+        // được bằng `--grep` mà không làm tiêu đề dài thêm.
+        `test('${tcId}: ${(scenario.name || "").replace(/'/g, "\\'")}${identity ? ` @identity:${identity}` : ""}'${playwrightTags(scenario, identity)}, async ({ page }) => {`,
         `  await openEntry(page);`,
-        `  await page.screenshot({ path: \`.qa-run/evidence/\${tc.tcId}-before.jpg\`, type: 'jpeg', quality: 60, scale: 'css' });`,
+        `  await shot(page, tc.tcId, 0, 'entry');`,
         ``,
     ];
 
-    for (const c of calls) {
+    // MỖI BƯỚC MỘT ẢNH (R2.2). `withShot` làm hai việc mà thiếu cái nào cũng hỏng:
+    //   1. bọc `test.step()`  → tiêu đề bước vào test-results.json, nên biết HỎNG Ở BƯỚC NÀO
+    //                           (đo được: expect() không bọc thì KHÔNG vào `result.steps[]`)
+    //   2. chụp trong `finally` → có ảnh kể cả khi bước ném lỗi, tức là có đúng tấm cần nhất
+    // Tiêu đề bước và tên file ảnh dùng CHUNG một chuỗi `NN-label` — đó là khoá để qa-verifier
+    // ghép "bước hỏng" với "ảnh của bước đó". Xem `stepShotLabel()` trong runtime/paths.js.
+    calls.forEach((c, i) => {
+        const n = i + 1;
+        const label = slugForShot(c.fn, n);
         lines.push(`  // ${c.gherkin}`);
+
+        // CHECKPOINT GIỮA LUỒNG (R2.3a). Đây là NGOẠI LỆ DUY NHẤT cho luật "spec không chứa
+        // locator": `getByText(<chuỗi>)` là NỘI DUNG người dùng nhìn thấy, không phải selector
+        // cấu trúc — nó không phụ thuộc DOM, không lỗi thời khi UI đổi class/id.
+        //
+        // Bọc `test.step` như mọi bước khác, nên khi checkpoint đỏ thì `result.steps[]` ghi
+        // đúng tên bước đó, `combine()` gán CHECKPOINT_FAILED, và báo cáo chỉ đúng một tấm ảnh.
+        if (c.kind === "assert") {
+            const want = c.arg ?? "";
+            if (!want) {
+                lines.push(`  // Checkpoint không có chuỗi để kiểm — bỏ qua (feature phải ghi trong "ngoặc kép").`);
+                return;
+            }
+            // Đi qua ĐÚNG `withShot` như mọi bước khác — KHÔNG tự viết `test.step` + `shot` ở đây.
+            //
+            // Bản đầu của nhánh này tự dựng khối và đặt `shot()` SAU `expect()`. Chạy thật thì
+            // lộ ra ngay: checkpoint đỏ → `expect` ném → dòng `shot()` không bao giờ tới →
+            // **bước hỏng là bước DUY NHẤT không có ảnh**. Đúng cái bẫy mà `finally` của
+            // `withShot` sinh ra để tránh, và tôi đã đi thẳng vào nó bằng cách viết đường thứ hai.
+            // Một đường code cho một việc: "chạy một bước và luôn để lại ảnh" = `withShot`.
+            lines.push(
+                `  await withShot(page, tc.tcId, ${n}, '${label}', async () => {`,
+                `    await expect(page.getByText(${JSON.stringify(want)}, { exact: false }),`,
+                `      'checkpoint giữa luồng: không thấy "${want.replace(/'/g, "\\'")}" sau bước trước đó').toBeVisible();`,
+                `  });`,
+            );
+            return;
+        }
+
         if (c.kind === "check") {
-            lines.push(`  await ${c.fn}(page);`);
-            continue;
+            lines.push(`  await withShot(page, tc.tcId, ${n}, '${label}', () => ${c.fn}(page));`);
+            return;
         }
         if (c.needsValue) {
             // Value from the .feature if the author quoted one, otherwise from the data file.
             // Never a literal baked into the spec: changing test data must not require
             // regenerating (and re-exploring for) the spec.
             const value = c.arg !== null ? `'${c.arg.replace(/'/g, "\\'")}'` : `String(Object.values(tc.data?.fields ?? {})[0] ?? '')`;
-            lines.push(`  await ${c.fn}(page, ${value});`);
-            continue;
+            lines.push(`  await withShot(page, tc.tcId, ${n}, '${label}', () => ${c.fn}(page, ${value}));`);
+            return;
         }
-        lines.push(`  await ${c.fn}(page);`);
-    }
+        lines.push(`  await withShot(page, tc.tcId, ${n}, '${label}', () => ${c.fn}(page));`);
+    });
 
     // The assertion is the ONE place pass/fail is decided (knowledge/oracle-problem.md), and
     // it comes from the test case's Expected Result. When that cannot be turned into a
     // checkable assertion, the spec FAILS LOUDLY instead of passing on two screenshots —
     // 13 of the 21 real specs were exactly that: goto + screenshot + nothing.
-    lines.push(``, `  await page.waitForTimeout(500);`, `  // Expected Result: ${expected || "(test case không ghi)"}`);
+    lines.push(
+        ``,
+        `  await page.waitForTimeout(500);`,
+        // Ảnh cuối: trạng thái màn hình NGAY TRƯỚC khi assert. Chụp sau assert thì test
+        // đỏ là không bao giờ tới dòng chụp — mất đúng tấm cần để hiểu vì sao đỏ.
+        "  await shot(page, tc.tcId, 99, 'final');",
+        `  // Expected Result: ${expected || "(test case không ghi)"}`,
+    );
     let assertionNote;
     if (!expected) {
         lines.push(
@@ -198,29 +396,60 @@ export function emitSpec({ scenario, catalogue, testCase, stepsImport = "../../t
         );
         assertionNote = "thiếu Expected Result → spec chủ động throw";
     } else {
-        // If the Expected Result names a money amount, assert the AMOUNT, not the string.
-        // `10.000đ` never matches a UI rendering `10.000 ₫` — that is exactly how TC-D-012
-        // failed while the product was correct. Rule: memory/semantic/money-comparison.md.
-        const amounts = moneyIn(expected);
+        // Hai tầng, cả hai đều deterministic (xem khối chú thích R2.3c/d ở trên):
+        //   1. số TIỀN đã lọc  → assert theo GIÁ TRỊ, bỏ đơn vị
+        //   2. chuỗi UI trong ngoặc kép → assert đúng chuỗi đó hiện trên màn hình
+        // Cả hai cùng có thì assert CẢ HAI — nhiều cửa kiểm thật thì oracle chặt hơn.
+        const amounts = assertableAmounts(expected);
+        const texts = assertableTexts(expected);
+        const notes = [];
+
         if (amounts.length) {
             lines.push(
                 `  // Expected Result có giá trị tiền: assert theo SỐ, bỏ đơn vị.`,
                 `  // "10.000đ" và "10.000 ₫" là CÙNG một giá trị — assert nguyên chuỗi là bắt test`,
                 `  // biết cách trình bày của một dự án cụ thể (memory/semantic/money-comparison.md).`,
+                `  // Đã LOẠI: mã định danh (BUG-1163), mã HTTP, phần trăm, mốc giờ, và số < 1000`,
+                `  // không kèm đơn vị tiền — assert những thứ đó là dựng cửa kiểm luôn xanh.`,
                 `  const bodyText = await page.locator('body').innerText();`,
                 `  const soTienTrenTrang = [...bodyText.matchAll(/-?\\d[\\d.,]*/g)]`,
                 `    .map(m => Number(m[0].replace(/[.,](?=\\d{3}\\b)/g, '').replace(',', '.')))`,
                 `    .filter(Number.isFinite);`,
                 ...amounts.map(a => `  expect(soTienTrenTrang, 'không thấy giá trị ${a} trên trang').toContain(${a});`),
             );
-            assertionNote = `assert ${amounts.length} giá trị tiền theo SỐ (bỏ đơn vị)`;
-        } else {
-            lines.push(
-                `  // So khớp theo Expected Result (không có giá trị tiền trong đó).`,
-                `  await expect(page.getByText(${JSON.stringify(expected)}, { exact: false })).toBeVisible();`,
-            );
-            assertionNote = "assert theo Expected Result nguyên văn";
+            notes.push(`${amounts.length} giá trị tiền theo SỐ`);
         }
+
+        if (texts.length) {
+            lines.push(
+                `  // Chuỗi UI mà test case đặt trong ngoặc kép — thứ người dùng NHÌN THẤY.`,
+                `  // Mã trong dấu backtick (VOUCHER_NOT_FOUND) KHÔNG được assert: đó là mã lỗi API,`,
+                `  // không phải text màn hình.`,
+                ...texts.map(t => `  await expect(page.getByText(${JSON.stringify(t)}, { exact: false }), 'không thấy "${t.replace(/'/g, "\\'")}" trên màn hình').toBeVisible();`),
+            );
+            notes.push(`${texts.length} chuỗi UI trong ngoặc kép`);
+        }
+
+        if (!amounts.length && !texts.length) {
+            // KHÔNG còn nhánh `getByText(<cả đoạn Expected Result>)`. Nó luôn đỏ (8/20 spec
+            // thật), và một assertion luôn đỏ dạy người đọc bỏ qua màu đỏ — tệ hơn không có.
+            // Vấn đề nằm ở TEST CASE, nên thông điệp phải chỉ về đó, không chỉ về code.
+            const oneLine = expected.replace(/\s+/g, " ").slice(0, 120).replace(/'/g, "\\'");
+            lines.push(
+                `  // Expected Result không quy được về một assertion kiểm được:`,
+                `  //   - không có giá trị tiền nào (sau khi loại mã định danh / % / giờ / số đếm)`,
+                `  //   - không có chuỗi UI nào đặt trong ngoặc kép`,
+                `  throw new Error(`,
+                `    '${tcId}: Expected Result không kiểm chứng được bằng máy — spec KHÔNG được sinh assertion giả.\\n' +`,
+                `    '  Expected Result hiện tại: ${oneLine}\\n' +`,
+                `    '  Cách sửa (ở BẢNG TEST CASE, không phải ở code): thêm số tiền cụ thể kèm đơn vị,\\n' +`,
+                `    '  hoặc đặt câu thông báo người dùng thấy trên màn hình vào trong "ngoặc kép".'`,
+                `  );`,
+            );
+            notes.push("KHÔNG assert được → spec chủ động throw, chỉ về bảng test case");
+        }
+
+        assertionNote = notes.join(" + ");
     }
 
     lines.push(

@@ -10,6 +10,7 @@ import { contextFor } from "../runtime/knowledge.js";
 import { registerArtifact } from "../qa-leader/tools/impact-analysis.js";
 import { artifactId } from "../runtime/db.js";
 import { verifyDeliverable, parseTestCaseRows } from "./tools/coverage-check.js";
+import { extractTestCases, renderTestCases } from "../runtime/testcase-doc.js";
 import * as P from "../runtime/paths.js";
 
 const ROLE = await readFile(new URL("./role.md", import.meta.url), "utf8");
@@ -96,12 +97,36 @@ async function agentStep({ skillText, userText, selfCheck, label, maxRevisions =
  *    Người đọc không có cách nào biết mục nào là thước đo. Nên mục của tool được đặt tên
  *    tách biệt hẳn, luôn ở cuối, và nói rõ nó ĐO — còn mục kia là LLM TỰ KHAI.
  */
+/**
+ * Bóc một lớp code fence bọc TOÀN BỘ nội dung (```markdown … ```).
+ *
+ * Chỉ bóc khi fence mở ở dòng ĐẦU và đóng ở dòng CUỐI. Một tài liệu có fence ở giữa (ví dụ ví
+ * dụ mã trong phần ghi chú) không bị đụng tới — bóc bừa sẽ làm hỏng chính đoạn mã đó.
+ */
+export function unfence(text) {
+    const lines = String(text ?? "").trim().split("\n");
+    if (lines.length < 2) return String(text ?? "").trim();
+    const open = /^\s*```+\s*[\w-]*\s*$/.test(lines[0]);
+    const close = /^\s*```+\s*$/.test(lines[lines.length - 1]);
+    if (!open || !close) return String(text ?? "").trim();
+    return lines.slice(1, -1).join("\n").trim();
+}
+
 export function assembleDeliverable({ testCases, check }) {
     const checkSection = check.ok
         ? `Đạt đủ coverage (idea Analyst: ${check.ideaCount}, test case: ${check.testCaseCount}, blocked: ${check.blockedCount}).`
         : `**CHƯA ĐẠT** — ${check.issues.join(" ")}`;
 
-    const body = String(testCases ?? "").trim();
+    // BÓC CODE FENCE TRƯỚC KHI KIỂM H1 (R1.2c).
+    //
+    // Model rất hay trả về cả tài liệu bọc trong ```markdown … ```. Khi ấy `body` bắt đầu bằng
+    // dấu ``` chứ không phải `#`, nên `hasOwnTitle` = false, và ta bọc THÊM một `# Deliverable`
+    // + `## 1. Test Cases` ra ngoài một tài liệu vốn đã có H1 của riêng nó.
+    //
+    // Kết quả đo được trên lần chạy 2026-08-24: file có HAI H1, và số mục đụng nhau —
+    // `## 1. Test Cases` rồi ngay dưới là `## 1. Coverage Strategy Analysis`. Mọi thứ đọc file
+    // này theo heading (kể cả người) đều lạc.
+    const body = unfence(String(testCases ?? "").trim());
     // LLM đã tự viết H1 thì không bọc thêm H1 nữa — dùng luôn thân nó.
     const hasOwnTitle = /^#\s+\S/.test(body);
     const head = hasOwnTitle ? `${body}\n` : `# Deliverable — QA Test Designer\n\n## 1. Test Cases\n${body}\n`;
@@ -141,7 +166,10 @@ function extractTestCaseIds(testCaseMarkdown) {
 export const CONTRACT = {
     agent: "qa-test-designer",
     requires: [P.TASK_ASSIGNMENT, P.DELIVERABLE_ANALYST],
-    produces: [P.DELIVERABLE_TEST_DESIGNER],
+    // `testcases.md` (R1) là ĐẶC TẢ tách riêng; `deliverable-test-designer.md` vẫn là báo cáo
+    // có lập luận. Khai cả hai vì node này ghi cả hai — thiếu một cái thì `node-registry` và
+    // impact analysis không biết file đó do ai sinh ra.
+    produces: [P.DELIVERABLE_TEST_DESIGNER, P.TESTCASES],
     inputs: { taskFile: "TASK_ASSIGNMENT", deliverableFile: "DELIVERABLE_ANALYST" },
 };
 
@@ -191,6 +219,30 @@ export async function run({ taskFile, deliverableFile }) {
     const deliverable = assembleDeliverable({ testCases, check });
 
     await runTool("write_file", { path: P.DELIVERABLE_TEST_DESIGNER, content: deliverable });
+
+    // ── R1.2b: ĐẶC TẢ ra file riêng ────────────────────────────────────
+    //
+    // `deliverable-test-designer.md` GIỮ NGUYÊN vai trò báo cáo có lập luận (coverage strategy,
+    // boundary sets, kiểm đếm). `testcases.md` chỉ trả lời đúng một câu: "có những test case
+    // nào". Trích bằng tool deterministic — KHÔNG hỏi LLM lần nữa, vì hỏi lại là mở đường cho
+    // hai file nói hai chuyện khác nhau về cùng một bộ test case.
+    const extracted = extractTestCases(testCases);
+    if (!extracted.found) {
+        // Không có bảng thì KHÔNG ghi ra một file rỗng: một `testcases.md` 0 dòng đọc như
+        // "thiết kế xong, không có test case nào" — khác hẳn "chưa trích được".
+        console.warn(`  [qa-test-designer] KHÔNG trích được bảng test case → không ghi ${P.TESTCASES}. ` +
+            extracted.problems.join(" "));
+    } else {
+        for (const p of extracted.problems) console.warn(`  [qa-test-designer/testcases.md] ${p}`);
+        await runTool("write_file", {
+            path: P.TESTCASES,
+            content: renderTestCases({
+                rows: extracted.rows,
+                headers: extracted.headers,
+                generatedAt: new Date().toISOString(),
+            }),
+        });
+    }
 
     // Register each test case in the traceability graph, derived from the tier-3
     // knowledge files this node actually read. Without this, impact analysis stops at

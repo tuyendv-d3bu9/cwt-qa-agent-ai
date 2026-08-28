@@ -74,6 +74,22 @@ function importedNames(src) {
         const dflt = /^\s*([A-Za-z_$][\w$]*)\s*(?:,|$)/.exec(clause.replace(/\{[^}]*\}/g, ""));
         if (dflt) names.add(dflt[1]);
     }
+
+    // IMPORT ĐỘNG CÓ DESTRUCTURE — `const { a, b } = await import("…")`.
+    //
+    // Bản trước chỉ đọc `import … from "…"`, nên mọi file nạp module theo kiểu động đều bị báo
+    // OAN là "quên import". Gặp thật khi `qa.js` thêm lệnh `test`: nó nạp `tc-filter.js` bên
+    // trong hàm (CLI không nên nạp cả cây module chỉ để in `--help`), và guard báo 5 lỗi giả.
+    //
+    // Báo oan nguy hiểm không kém báo sót: người ta học cách bỏ qua bộ test này.
+    for (const m of src.matchAll(/(?:const|let|var)\s*\{([^}]*)\}\s*=\s*(?:await\s+)?import\s*\(/g)) {
+        for (const part of m[1].split(",")) {
+            const bit = part.trim();
+            if (!bit) continue;
+            // `{ a: b }` và `{ a as b }` — tên dùng được là vế PHẢI.
+            names.add((bit.split(/\s*:\s*|\s+as\s+/).pop() ?? bit).trim());
+        }
+    }
     return names;
 }
 
@@ -135,6 +151,11 @@ chk(">>> KHÔNG file nào dùng hàm runtime mà quên import (node --check KHÔ
         JSON.stringify({ used, imported: [...imported], biet: runtimeExports.has("runAgentLoop") }));
     chk("và KHÔNG báo oan khi có import đúng",
         importedNames(`import { runAgentLoop } from "../runtime/agent-loop.js";`).has("runAgentLoop"));
+    // Import động có destructure cũng là import — không báo oan.
+    chk(">>> KHÔNG báo oan với `const { x } = await import(...)` (qa.js nạp module trong hàm)",
+        importedNames(`const { parseFilter, applyFilter } = await import("./agents/runtime/tc-filter.js");`).has("parseFilter"));
+    chk("import động có đổi tên: lấy vế phải",
+        importedNames(`const { a: b } = await import("./m.js");`).has("b"));
 }
 
 const fail = P.filter(([, c]) => !c);

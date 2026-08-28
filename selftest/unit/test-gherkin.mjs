@@ -61,12 +61,39 @@ const feature = `Feature: Áp mã giảm giá khi checkout
 // ─────────── sinh spec ───────────
 {
     const sc = G.parseFeature(feature).scenarios[0];
-    const tc = { tcId: "TC-D-001", expected: "Áp mã thành công, tổng tiền giảm đúng", data: { fields: { voucher_code: "SALE20" } } };
+    // Expected Result phải KIỂM CHỨNG ĐƯỢC. Bản trước của bộ test này dùng
+    // "Áp mã thành công, tổng tiền giảm đúng" — câu không có số tiền nào và không có chuỗi UI
+    // nào trong ngoặc kép. Bản cũ của emitSpec biến nguyên câu đó thành
+    // `getByText("Áp mã thành công, tổng tiền giảm đúng")` — assertion LUÔN ĐỎ, vì không trang
+    // nào in ra đúng câu đó. Và bộ test này đã KHOÁ đúng hành vi sai ấy lại.
+    // Từ R2.3c/d: câu như vậy làm spec THROW (ca test riêng ở test-assertion-filter.mjs).
+    // Fixture đổi sang một Expected Result kiểm chứng được thật; Ý ĐỊNH ca test giữ nguyên.
+    const tc = {
+        tcId: "TC-D-001",
+        expected: 'Áp mã thành công, hiển thị "Đang kích hoạt giảm giá", tổng tiền sau giảm là 700.000đ',
+        data: { fields: { voucher_code: "SALE20" } },
+    };
     const out = G.emitSpec({ scenario: sc, catalogue, testCase: tc });
 
-    chk(">>> spec sinh ra KHÔNG có locator nào (mọi hành động qua step library)",
-        !codeOnly(out.content).includes("getByRole") && !codeOnly(out.content).includes("locator("),
-        codeOnly(out.content).match(/.*getByRole.*/)?.[0] ?? "ok");
+    // Luật: spec KHÔNG được chứa locator của PHẦN TỬ — mọi hành động đi qua step library, và
+    // locator sống ở Page Object do Playwright sinh.
+    //
+    // Có ĐÚNG MỘT ngoại lệ, và nó có trước R2: `page.locator('body').innerText()` của cơ chế
+    // so tiền theo GIÁ TRỊ (memory/semantic/money-comparison.md). Đó không phải locator trỏ vào
+    // một phần tử để thao tác — nó đọc text cả trang. Bản trước của ca test này cấm mọi chuỗi
+    // `locator(` và vẫn xanh, chỉ vì fixture cũ không có số tiền nào nên không đi vào nhánh đó.
+    // Tức là luật chưa từng được kiểm ở nhánh tiền. Giờ ghi ngoại lệ ra cho tường minh.
+    {
+        const code = codeOnly(out.content);
+        const locators = [...code.matchAll(/\.(?:locator|getByRole|getByLabel|getByPlaceholder|getByTestId)\([^)]*\)/g)]
+            .map(m => m[0])
+            .filter(s => !s.startsWith(".locator('body')"));
+        chk(">>> spec sinh ra KHÔNG có locator PHẦN TỬ nào (mọi hành động qua step library)",
+            locators.length === 0, JSON.stringify(locators));
+        chk("ngoại lệ DUY NHẤT được phép là locator('body') của cơ chế so tiền",
+            code.includes(".locator('body').innerText()"),
+            code.match(/.*locator\('body'\).*/)?.[0] ?? "(không có nhánh tiền)");
+    }
     chk(">>> KHÔNG có 'TODO: locator chưa xác định' — đúng thứ làm 13/21 spec vô dụng",
         !out.content.includes("TODO"));
     chk("import đúng các hàm step đã dùng",
@@ -74,13 +101,34 @@ const feature = `Feature: Áp mã giảm giá khi checkout
         out.content.split("\n").find(l => l.startsWith("import { openEntry")));
     chk("bước cần value được truyền value từ .feature",
         out.content.includes("step3_nhapMaGiamGia(page, 'SALE20')"), out.content.match(/.*step3.*/)?.[0]);
-    chk("bước không cần value -> gọi 1 tham số", out.content.includes("step1_themSanPhamVaoGio(page);"));
-    chk(">>> có ĐÚNG 1 assertion, sinh từ Expected Result (chỗ duy nhất quyết pass/fail)",
-        (codeOnly(out.content).match(/await expect\(/g) ?? []).length === 1 &&
-        out.content.includes("Áp mã thành công, tổng tiền giảm đúng"),
-        String((codeOnly(out.content).match(/await expect\(/g) ?? []).length));
-    chk("có 2 ảnh before/after, đúng .qa-run/evidence/",
-        (out.content.match(/\.qa-run\/evidence\//g) ?? []).length === 2);
+    // Từ R2.2 mọi lời gọi bước đi qua `withShot(...)`. Ý ĐỊNH của ca test không đổi:
+    // bước không cần giá trị thì KHÔNG được truyền giá trị nào.
+    chk("bước không cần value -> gọi 1 tham số",
+        out.content.includes("=> step1_themSanPhamVaoGio(page))"),
+        out.content.split("\n").find(l => l.includes("step1_themSanPhamVaoGio")));
+    chk(">>> assertion sinh từ Expected Result (chỗ duy nhất quyết pass/fail)",
+        codeOnly(out.content).includes("toContain(700000)") &&
+        codeOnly(out.content).includes('getByText("Đang kích hoạt giảm giá"'),
+        out.assertionNote);
+    chk(">>> KHÔNG assert nguyên câu Expected Result (nhánh cũ LUÔN ĐỎ)",
+        !codeOnly(out.content).includes('getByText("Áp mã thành công'),
+        out.assertionNote);
+    // R2.2 ĐỔI HẲN chỗ này. Trước: đúng 2 ảnh — một ở trang chủ trước khi làm gì, một trong
+    // `afterEach` sau khi test đã kết thúc. Với luồng 5 bước thì khoảnh khắc "áp mã thành
+    // công hay không" — thứ DUY NHẤT cần nhìn — không có ảnh nào. Giờ: một ảnh mỗi bước,
+    // cộng ảnh điểm vào và ảnh cuối, và mỗi bước bọc `test.step` để báo cáo JSON của
+    // Playwright ghi lại được HỎNG Ở BƯỚC NÀO.
+    {
+        const shots = [...out.content.matchAll(/withShot\(page, tc\.tcId, (\d+), '([^']+)'/g)];
+        chk(">>> MỖI BƯỚC một ảnh, không phải 2 ảnh cho cả test case",
+            shots.length === 4, JSON.stringify(shots.map(m => m[1] + ":" + m[2])));
+        chk("có ảnh điểm vào và ảnh cuối",
+            out.content.includes("shot(page, tc.tcId, 0, 'entry')") &&
+            out.content.includes("shot(page, tc.tcId, 99, 'final')"));
+        chk(">>> KHÔNG còn 2 ảnh kiểu cũ, và không còn afterEach chụp sau khi test kết thúc",
+            !out.content.includes("-before.jpg") && !out.content.includes("-after.jpg") &&
+            !out.content.includes("test.afterEach"));
+    }
     chk("mỗi lời gọi có comment là step Gherkin gốc (đọc spec biết ngay nó làm gì)",
         out.content.includes("// Given Ở trang chủ") && out.content.includes("// When Nhập mã giảm giá"));
     chk("data lấy từ file JSON, KHÔNG nhúng literal test data khác", out.content.includes("dataset.cases.find"));

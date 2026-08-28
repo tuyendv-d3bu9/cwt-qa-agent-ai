@@ -32,6 +32,25 @@ params:
     note: >-
       KHÔNG mặc định sinh "bug". Verdict ASK nghĩa là người phải đọc deliverable-verifier.md
       và tự xác định cái nào là bug thật; luồng không đoán thay.
+  - name: tc
+    kind: string
+    default: ""
+    note: >-
+      Chỉ chạy các test case này: "TC-D-001,TC-D-002" hoặc khoảng "TC-D-001..TC-D-005".
+      Rỗng = chạy tất cả (giữ nguyên hành vi cũ).
+  - name: tags
+    kind: string
+    default: ""
+    note: 'lọc theo cột Tags của bảng test case, ví dụ "@Happy Path"'
+  - name: priority
+    kind: string
+    default: ""
+    note: 'lọc theo cột Priority, ví dụ "Critical,High"'
+  - name: suite
+    kind: string
+    default: ""
+    note: tên bộ đặt sẵn trong flows/suites.yml (smoke | happy | critical | regression)
+
 
 flags:
   - name: new-run
@@ -84,6 +103,11 @@ steps:
       - TEST_RESULTS
 
   # ── 4. Kiểm chứng ─────────────────────────────────────────────────────
+    with:
+      tc: $param.tc
+      tags: $param.tags
+      priority: $param.priority
+      suite: $param.suite
   - node: qa-verifier
     label: Kiểm chứng kết quả chạy
     # Node này KHÔNG tự chạy .spec.ts — người/CI chạy. Xem agents/qa-verifier/role.md.

@@ -1,18 +1,6 @@
 // qa.js
-// UI terminal cho cả hệ thống. Một lệnh duy nhất phải nhớ:  node qa.js
-//
-// VÌ SAO CÓ FILE NÀY. Trước đó muốn dùng hệ thống phải nhớ 4 lệnh khác nhau (`flow-2-...js`,
-// `flow-3-...js`, `approve.js`, `supervise.js`), mỗi lệnh một bộ cờ riêng, tên đánh số theo
-// một hệ không ai giải thích được, và không có chỗ nào trả lời câu "giờ tôi phải làm gì tiếp".
-//
-// Giờ: MỘT cửa vào. `node qa.js` — mọi thứ khác đi qua đây.
-//
-// KHÔNG THÊM DEPENDENCY. `node:readline/promises` có sẵn từ Node 17. Thêm một thư viện TUI
-// cho một menu 6 dòng là đổi một menu 6 dòng lấy một chỗ có thể vỡ khi `npm install` lỗi.
-//
-// Các lệnh cũ VẪN CHẠY. File này không thay thế chúng, nó gọi đúng cùng một đường code
-// (`flow-runner.js`, `memory.js`, `qa-leader/supervise`), nên không có hành vi nào tồn tại
-// hai bản.
+// UI terminal cho cả hệ thống.
+
 
 import "dotenv/config";
 import { createInterface } from "node:readline/promises";
@@ -348,6 +336,126 @@ function splitArgs(line) {
 // Điều phối lệnh
 // ─────────────────────────────────────────────────────────────────────
 
+/**
+ * `node qa.js test [--tc=… | --tags=… | --priority=… | --suite=…]` (R4.1c)
+ *
+ * Gọi hộ `npx playwright test --grep …` cho người không nhớ cú pháp. Dùng CHUNG
+ * `tc-filter.js` với tầng sinh spec, nên "bộ smoke" ở đây và "bộ smoke" lúc sinh spec là
+ * cùng một danh sách — không phải hai định nghĩa tình cờ giống nhau.
+ *
+ * Không cờ nào → chạy tất cả, đúng như gõ `npx playwright test`.
+ */
+async function cmdTest(args) {
+    const { parseFilter, applyFilter, grepFor, loadSuites, FilterError } = await import("./agents/runtime/tc-filter.js");
+    const { extractTestCases } = await import("./agents/runtime/testcase-doc.js");
+    const P = await import("./agents/runtime/paths.js");
+    const { readFile } = await import("node:fs/promises");
+    const { spawnSync } = await import("node:child_process");
+
+    const val = (name) => {
+        const hit = args.find(a => a.startsWith(`--${name}=`));
+        return hit ? hit.slice(name.length + 3) : "";
+    };
+    const opts = { tc: val("tc"), tags: val("tags"), priority: val("priority"), suite: val("suite") };
+
+    let grep = null;
+    if (Object.values(opts).some(Boolean)) {
+        // Danh sách test case lấy từ ĐẶC TẢ, không từ thư mục spec: lọc theo tag/priority cần
+        // cột Tags/Priority, mà chỉ bảng test case mới có.
+        let md = null;
+        for (const p of [P.TESTCASES, P.DELIVERABLE_TEST_DESIGNER]) {
+            try { md = await readFile(p, "utf8"); break; } catch { /* thử file kế */ }
+        }
+        if (md === null) {
+            console.error(`Chưa có bảng test case (${P.TESTCASES}) — chạy qa-test-designer trước.`);
+            return 1;
+        }
+        const all = extractTestCases(md).rows.map(r => ({ tcId: r[0], tags: r[7], priority: r[6] }));
+        try {
+            const filter = parseFilter({ ...opts, suites: await loadSuites() });
+            const sel = applyFilter(all, filter);
+            grep = grepFor(filter, sel.selected.map(t => t.tcId));
+            console.log(`Chạy ${sel.scope}: ${sel.selected.map(t => t.tcId).join(", ")}`);
+        } catch (err) {
+            if (!(err instanceof FilterError)) throw err;
+            console.error(err.message);
+            if (err.available) console.error(`  Đang có: ${JSON.stringify(err.available, null, 1)}`);
+            return 1;
+        }
+    }
+
+    // ⚠ GỌI THẲNG CLI CỦA PLAYWRIGHT BẰNG `node`, không qua `npx` và không qua shell.
+    //
+    // Hai cái bẫy đã gặp thật, cái sau lộ ra ngay khi vá cái trước:
+    //
+    //  1. `spawnSync("npx", …, { shell: true })` — biểu thức grep chứa `|` và `()`, nên trên
+    //     Windows `cmd.exe` diễn giải chúng TRƯỚC khi tới npx:
+    //     `--grep (TC-D-001|TC-D-002)` thành một pipeline, cmd báo
+    //     `'TC-D-002)' is not recognized as an internal or external command`.
+    //     Chỉ hỏng khi lọc từ HAI test case trở lên — một id (`(TC-D-003)`, không có `|`)
+    //     chạy đúng, nên rất dễ lọt qua một lần thử nhanh.
+    //
+    //  2. Bỏ `shell: true` rồi gọi `npx.cmd` → `spawnSync npx.cmd EINVAL`: Node 22 từ chối
+    //     spawn `.cmd`/`.bat` khi không có shell (vá CVE-2024-27980).
+    //
+    // Chạy `node <cli.js>` thoát cả hai: không có shell nào diễn giải đối số, và không có
+    // file `.cmd` nào để Node từ chối.
+    const cli = "node_modules/@playwright/test/cli.js";
+    const argv = [cli, "test", ...(grep ? ["--grep", grep] : [])];
+    console.log(`  npx playwright test${grep ? ` --grep ${grep}` : ""}`);
+
+    const r = spawnSync(process.execPath, argv, { stdio: "inherit" });
+    if (r.error) {
+        console.error(`Không chạy được Playwright (${cli}): ${r.error.message}\n` +
+            `  Cài chưa? npm install`);
+        return 1;
+    }
+    return r.status ?? 1;
+}
+
+/**
+ * `node qa.js ui [--port=5179] [--host=127.0.0.1]` (R5)
+ *
+ * Máy chủ web local. Nó KHÔNG chứa logic nghiệp vụ — chỉ `spawn` đúng các lệnh `qa.js` này và
+ * stream stdout về trình duyệt. Xem chú thích đầu `ui/server.js`.
+ */
+async function cmdUi(args) {
+    const { startUiServer } = await import("./ui/server.js");
+    const val = (n, d) => {
+        const hit = args.find(a => a.startsWith(`--${n}=`));
+        return hit ? hit.slice(n.length + 3) : d;
+    };
+    const host = val("host", "127.0.0.1");
+    const port = Number(val("port", "5179"));
+
+    // Mặc định 127.0.0.1: máy khác trong mạng KHÔNG nối tới được. Mở ra ngoài phải là ý định
+    // tường minh, và phải kèm cảnh báo — máy chủ này ghi file trong repo và sinh tiến trình con.
+    if (host !== "127.0.0.1" && host !== "localhost") {
+        console.warn(
+            `\n⚠  ĐANG MỞ RA NGOÀI: --host=${host}\n` +
+            `   Máy chủ này GHI FILE trong repo và SINH TIẾN TRÌNH CON. Bất kỳ ai tới được cổng\n` +
+            `   này và có token đều chạy được pipeline của bạn. Chỉ làm việc này trong mạng tin cậy.\n`);
+    }
+
+    let srv;
+    try {
+        srv = await startUiServer({ port, host });
+    } catch (err) {
+        console.error(`Không mở được cổng ${port}: ${err.message}\n  Thử: node qa.js ui --port=${port + 1}`);
+        return 1;
+    }
+
+    console.log(`\n  Giao diện QA Agent đang chạy:\n`);
+    console.log(`    ${srv.url}\n`);
+    console.log(`  Token đổi mỗi lần khởi động — URL cũ sẽ không dùng lại được.`);
+    console.log(`  Ctrl+C để dừng.\n`);
+
+    await new Promise((resolve) => {
+        process.on("SIGINT", () => { srv.close(); resolve(); });
+    });
+    return 0;
+}
+
 const HELP = `
 node qa.js                          menu tương tác
 node qa.js flows                    liệt kê luồng
@@ -359,6 +467,8 @@ node qa.js state                    trạng thái phiên hiện tại + lịch s
 node qa.js watch                    bảng giám sát MỌI phiên
 node qa.js redo <node> [--only]     sinh LẠI một bước + mọi bước phụ thuộc nó
 node qa.js new "<mô tả>"            sinh node mới từ mô tả  [--dry-run]
+node qa.js test [--tc=|--suite=]    chạy spec đã sinh, lọc theo test case
+node qa.js ui [--port=|--host=]     mở giao diện web local (thay cho gõ lệnh)
 `;
 
 const [cmd, ...rest] = argv;
@@ -380,6 +490,8 @@ switch (cmd) {
         catch (err) { console.error(`Không duyệt được: ${err.message}`); code = 1; }
         break;
     }
+    case "test": code = await cmdTest(rest); break;
+    case "ui": code = await cmdUi(rest); break;
     case "help": case "--help": case "-h": console.log(HELP); break;
     default:
         console.error(`Không có lệnh "${cmd}".${HELP}`);

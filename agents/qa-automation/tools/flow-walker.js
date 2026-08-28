@@ -62,90 +62,158 @@ export async function walkFlow({ flow, mcp, snapshot, resolve, ask, log = () => 
     }
 
     for (const step of flow?.steps ?? []) {
-        // Fresh snapshot every step: the page changed because of the PREVIOUS step, and a
-        // stale `ref` is worse than no ref (see mcp-cost-optimization.md, "ref transient").
-        const snap = await snapshot();
-        const candidates = candidateNodes(snap.nodes, step);
+        // MỘT bước nghiệp vụ có thể là NHIỀU động tác (R2.1) — "nhập mã ... rồi áp dụng".
+        // `parts` do ui-flow-parser tách deterministic; flow dựng tay (bộ test, hoặc tài liệu
+        // cũ) không có `parts` thì rơi về đúng hành vi cũ: một động tác.
+        const parts = (step.kind === "check" || !step.parts?.length) ? [step.text] : step.parts;
+        const actions = [];
+        // Dừng bằng CỜ, không phải `break` xuyên hai vòng. Lý do là một lỗi thật đã bị bộ
+        // test bắt: `break` ra thẳng vòng ngoài thì nhảy qua chỗ ghi `visited`, nên động tác
+        // ĐẦU — đã thực hiện thật trên trình duyệt — biến mất khỏi bản ghi. `emitSteps` sau đó
+        // coi cả bước là chưa làm được, dù một nửa đã chạy. Mất trạng thái kiểu đó chính là
+        // thứ R2.1 sinh ra để diệt.
+        let halted = false;
+        let observed = false;
 
-        if (candidates.length === 0) {
-            findings.push({
-                step: step.n, text: step.text, kind: "no_candidates",
-                detail: `Trang hiện tại không có phần tử tương tác nào để thực hiện bước này.`,
+        for (let pi = 0; pi < parts.length; pi++) {
+            const partText = parts[pi];
+            // Nhãn dùng trong log/finding. Bước một động tác giữ nguyên "bước 3" như trước —
+            // không làm nhiễu log của trường hợp phổ biến.
+            const at = parts.length > 1 ? `bước ${step.n}.${pi + 1}` : `bước ${step.n}`;
+
+            // Fresh snapshot every action: the page changed because of the PREVIOUS one, and a
+            // stale `ref` is worse than no ref (see mcp-cost-optimization.md, "ref transient").
+            // Đây cũng chính là lý do phải chụp lại giữa `fill` và `click`: sau khi gõ mã, nút
+            // "Áp dụng" mới đổi trạng thái/xuất hiện.
+            const snap = await snapshot();
+            const candidates = candidateNodes(snap.nodes, { ...step, text: partText });
+
+            if (candidates.length === 0) {
+                findings.push({
+                    step: step.n, text: partText, kind: "no_candidates",
+                    detail: `Trang hiện tại không có phần tử tương tác nào để thực hiện ${parts.length > 1 ? `động tác ${pi + 1} của ` : ""}bước này.`,
+                });
+                stoppedAt = step.n;
+                log(`  ${at}: KHÔNG có phần tử tương tác nào trên trang — dừng.`);
+                halted = true;
+                break;
+            }
+
+            const decision = await ask({
+                step: partText,
+                kind: step.kind,
+                hints: step.hints ?? [],
+                candidates,
             });
-            stoppedAt = step.n;
-            log(`  bước ${step.n}: KHÔNG có phần tử tương tác nào trên trang — dừng.`);
-            break;
-        }
 
-        const decision = await ask({
-            step: step.text,
-            kind: step.kind,
-            hints: step.hints ?? [],
-            candidates,
-        });
+            // An observation step needs no click. It is still worth a snapshot (done above), so
+            // the registry learns whatever screen it lands on.
+            if (step.kind === "check") {
+                visited.push({ step: step.n, text: step.text, action: "observe", element: null, actions: [] });
+                log(`  ${at}: quan sát (không click).`);
+                observed = true;
+                break;
+            }
 
-        // An observation step needs no click. It is still worth a snapshot (done above), so
-        // the registry learns whatever screen it lands on.
-        if (step.kind === "check") {
-            visited.push({ step: step.n, text: step.text, action: "observe", element: null });
-            log(`  bước ${step.n}: quan sát (không click).`);
-            continue;
-        }
+            if (!decision?.found || !decision.name) {
+                findings.push({
+                    step: step.n, text: partText, kind: "unmatched",
+                    detail: decision?.why || `Không khớp được ${parts.length > 1 ? `động tác ${pi + 1} của ` : ""}bước này với phần tử nào trên trang.`,
+                    candidates: candidates.slice(0, 10).map(c => `${c.role} "${c.name ?? ""}"`),
+                });
+                stoppedAt = step.n;
+                log(`  ${at}: KHÔNG khớp được phần tử — dừng, ghi finding (KHÔNG đoán).`);
+                halted = true;
+                break;
+            }
 
-        if (!decision?.found || !decision.name) {
-            findings.push({
-                step: step.n, text: step.text, kind: "unmatched",
-                detail: decision?.why || `Không khớp được bước này với phần tử nào trên trang.`,
-                candidates: candidates.slice(0, 10).map(c => `${c.role} "${c.name ?? ""}"`),
+            const matchedCandidate = candidates.find(c =>
+                (!decision.role || c.role === decision.role) &&
+                ((c.name && c.name.toLowerCase() === decision.name.toLowerCase()) ||
+                 (c.name && c.name.toLowerCase().includes(decision.name.toLowerCase())) ||
+                 (c.text && c.text.toLowerCase().includes(decision.name.toLowerCase())))
+            );
+            const freshRef = matchedCandidate?.ref ?? null;
+
+            const element = await resolve({ role: decision.role, name: decision.name, ref: freshRef });
+            if (!freshRef && !element?.ref && !element?.locator) {
+                findings.push({
+                    step: step.n, text: partText, kind: "unresolvable",
+                    detail: `AI chọn ${decision.role} "${decision.name}" nhưng không lấy được locator/ref cho nó.`,
+                });
+                stoppedAt = step.n;
+                log(`  ${at}: chọn được phần tử nhưng không resolve được locator — dừng.`);
+                halted = true;
+                break;
+            }
+
+            const performed = await performAction({
+                mcp, decision,
+                element: { ...element, ref: freshRef ?? element?.ref },
+                step: { ...step, text: partText },
             });
-            stoppedAt = step.n;
-            log(`  bước ${step.n}: KHÔNG khớp được phần tử — dừng, ghi finding (KHÔNG đoán).`);
-            break;
-        }
+            if (performed.error) {
+                findings.push({
+                    step: step.n, text: partText, kind: "action_failed",
+                    detail: `${performed.tool} lỗi: ${performed.error}`,
+                });
+                stoppedAt = step.n;
+                log(`  ${at}: ${performed.tool} LỖI — dừng: ${performed.error}`);
+                halted = true;
+                break;
+            }
 
-        const matchedCandidate = candidates.find(c =>
-            (!decision.role || c.role === decision.role) &&
-            ((c.name && c.name.toLowerCase() === decision.name.toLowerCase()) ||
-             (c.name && c.name.toLowerCase().includes(decision.name.toLowerCase())) ||
-             (c.text && c.text.toLowerCase().includes(decision.name.toLowerCase())))
-        );
-        const freshRef = matchedCandidate?.ref ?? null;
-
-        const element = await resolve({ role: decision.role, name: decision.name, ref: freshRef });
-        if (!freshRef && !element?.ref && !element?.locator) {
-            findings.push({
-                step: step.n, text: step.text, kind: "unresolvable",
-                detail: `AI chọn ${decision.role} "${decision.name}" nhưng không lấy được locator/ref cho nó.`,
+            screens++;
+            actions.push({
+                part: partText,
+                action: performed.tool,
+                element: `${decision.role ?? "?"} "${decision.name}"`,
+                confidence: decision.confidence ?? null,
             });
-            stoppedAt = step.n;
-            log(`  bước ${step.n}: chọn được phần tử nhưng không resolve được locator — dừng.`);
-            break;
+            log(`  ${at}: ${performed.tool} → ${decision.role ?? "?"} "${decision.name}"` +
+                (decision.confidence === "low" ? "  [confidence THẤP — cần người xem]" : ""));
+
+            if (decision.confidence === "low") {
+                findings.push({
+                    step: step.n, text: partText, kind: "low_confidence",
+                    detail: `Khớp với ${decision.role ?? "?"} "${decision.name}" nhưng AI tự đánh confidence thấp: ${decision.why ?? "(không nêu lý do)"}`,
+                });
+            }
         }
 
-        const performed = await performAction({ mcp, decision, element: { ...element, ref: freshRef ?? element?.ref }, step });
-        if (performed.error) {
-            findings.push({
-                step: step.n, text: step.text, kind: "action_failed",
-                detail: `${performed.tool} lỗi: ${performed.error}`,
+        if (observed) continue;
+
+        // Ghi cả khi bước mới làm ĐƯỢC MỘT PHẦN. Phần đã làm là trạng thái THẬT của trình
+        // duyệt — bỏ nó đi thì bản ghi nói dối về việc đã xảy ra.
+        // `action`/`element` phẳng vẫn giữ, trỏ vào động tác ĐẦU: `renderWalk()` và mọi thứ đọc
+        // hình dạng cũ tiếp tục chạy. `actions[]` là nguồn sự thật mới cho `emitSteps()`.
+        if (actions.length) {
+            visited.push({
+                step: step.n, text: step.text,
+                action: actions[0].action,
+                element: actions[0].element,
+                confidence: actions[0].confidence,
+                actions,
+                partial: actions.length < parts.length || undefined,
             });
-            stoppedAt = step.n;
-            log(`  bước ${step.n}: ${performed.tool} LỖI — dừng: ${performed.error}`);
-            break;
         }
+        if (halted) break;
+    }
 
-        screens++;
-        visited.push({
-            step: step.n, text: step.text, action: performed.tool,
-            element: `${decision.role ?? "?"} "${decision.name}"`,
-            confidence: decision.confidence ?? null,
-        });
-        log(`  bước ${step.n}: ${performed.tool} → ${decision.role ?? "?"} "${decision.name}"` +
-            (decision.confidence === "low" ? "  [confidence THẤP — cần người xem]" : ""));
-
-        if (decision.confidence === "low") {
+    // ── CỬA KIỂM: động tác bị mất âm thầm ──────────────────────────────
+    // Chính lỗi này đã sống 6 ngày mà không ai thấy. Sửa xong mà không có cửa kiểm thì lần sau
+    // một liên từ khác (hoặc một `parts` bị bỏ quên khi dựng flow) lại làm mất một động tác, và
+    // lại không có gì báo. Đây là luật số 2 của repo áp cho chính bản sửa này.
+    for (const step of flow?.steps ?? []) {
+        if (step.kind === "check") continue;
+        const want = step.parts?.length ?? 1;
+        if (want < 2) continue;
+        const got = visited.find(v => v.step === step.n)?.actions?.length ?? 0;
+        if (got > 0 && got < want) {
             findings.push({
-                step: step.n, text: step.text, kind: "low_confidence",
-                detail: `Khớp với ${decision.role ?? "?"} "${decision.name}" nhưng AI tự đánh confidence thấp: ${decision.why ?? "(không nêu lý do)"}`,
+                step: step.n, text: step.text, kind: "action_lost",
+                detail: `Bước này gồm ${want} động tác nhưng chỉ thực hiện được ${got}. ` +
+                    `Các động tác chưa làm: ${step.parts.slice(got).map(p => `"${p}"`).join(", ")}.`,
             });
         }
     }
@@ -281,7 +349,10 @@ export async function retryUnreached({ flow, previous, mcp, snapshot, resolve, a
  * findings say what happened, this says what is still missing.
  */
 export function unreachedSteps({ flow, visited }) {
-    const done = new Set((visited ?? []).map(v => v.step));
+    // Bước làm được MỘT NỬA tính là CHƯA xong (R2.1). Nó có mặt trong `visited` để giữ đúng
+    // trạng thái trình duyệt đã xảy ra, nhưng với câu hỏi "còn thiếu gì" thì một bước gõ mã mà
+    // chưa bấm áp dụng vẫn là thiếu — và Gherkin writer phải được biết là KHÔNG dùng nó được.
+    const done = new Set((visited ?? []).filter(v => !v.partial).map(v => v.step));
     return (flow?.steps ?? [])
         .filter(s => !done.has(s.n))
         .map(s => ({ n: s.n, text: s.text, kind: s.kind }));

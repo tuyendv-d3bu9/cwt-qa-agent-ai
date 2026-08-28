@@ -67,6 +67,25 @@ export const MCP_OUT_DIR = `${RUN_ROOT}/mcp`;
 export const CACHE_DIR = `${RUN_ROOT}/cache`;
 export const RUNS_DB = `${RUN_ROOT}/runs.db`;
 
+/**
+ * ── TRẠNG THÁI ĐĂNG NHẬP (R6) ────────────────────────────────────────
+ *
+ * `storageState` của Playwright cho từng tư cách khai trong tài liệu luồng.
+ *
+ * VÌ SAO Ở `.qa-run/` CHỨ KHÔNG PHẢI `tests/`. Đây là **sản phẩm của một lần chạy**, không phải
+ * tài sản giữ lại: nó chứa cookie/localStorage của một phiên đăng nhập thật, hết hạn theo thời
+ * gian, và **không được commit**. Để nhầm sang `tests/` là đưa thông tin phiên vào git.
+ *
+ * `identities.json` là hợp đồng giữa pipeline và `playwright.config.ts`: pipeline ghi ra danh
+ * sách tư cách đọc được từ tài liệu luồng, config đọc lên để dựng project. Không có file này
+ * thì config chạy đúng như trước khi có R6 — dự án không có đăng nhập không phải khai gì.
+ */
+export const AUTH_DIR = `${RUN_ROOT}/auth`;
+export const IDENTITIES_JSON = `${AUTH_DIR}/identities.json`;
+export const authStatePath = (identity) => `${AUTH_DIR}/${identity}.json`;
+/** Spec dựng trạng thái đăng nhập — chạy TRƯỚC mọi spec cần tư cách đó (project `dependencies`). */
+export const authSetupSpec = (identity) => `${SPEC_DIR}/auth/${identity}.setup.ts`;
+
 // ── Individual run files ─────────────────────────────────────────────
 export const TASK_ASSIGNMENT = `${DELIVERABLES_DIR}/task-assignment.md`;
 export const GAP_REPORT = `${DELIVERABLES_DIR}/gap-report.md`;
@@ -81,6 +100,26 @@ export const DELIVERABLE_TEST_DESIGNER = `${DELIVERABLES_DIR}/deliverable-test-d
 export const DELIVERABLE_AUTOMATION = `${DELIVERABLES_DIR}/deliverable-automation.md`;
 export const DELIVERABLE_VERIFIER = `${DELIVERABLES_DIR}/deliverable-verifier.md`;
 export const DELIVERABLE_REPORTER = `${DELIVERABLES_DIR}/deliverable-reporter.md`;
+
+/**
+ * ── TEST CASE: ĐẶC TẢ vs KẾT QUẢ (R1) ────────────────────────────────
+ *
+ * Hai file, tách theo đúng ranh giới "cái được thiết kế" và "cái đo được":
+ *
+ *   TESTCASES         chỉ bảng 8 trường, không lập luận, không kiểm đếm. Đổi khi THIẾT KẾ đổi.
+ *   TESTCASES_RESULT  thêm cột `Kết quả` (OK/NG/…). Đổi sau MỖI LẦN CHẠY.
+ *
+ * VÌ SAO PHẢI TÁCH. Trước R1 cả hai nằm chung trong `deliverable-test-designer.md` — một file
+ * vừa là đặc tả vừa là báo cáo có lập luận (coverage strategy, boundary sets, kiểm đếm). Ai
+ * muốn "cho tôi xem danh sách test case" phải tự lọc bằng mắt, và mọi node hạ nguồn phải parse
+ * lại cả tài liệu để lấy ra một cái bảng.
+ *
+ * `deliverable-test-designer.md` GIỮ NGUYÊN vai trò báo cáo — không bỏ đi, không thay thế.
+ */
+export const TESTCASES = `${DELIVERABLES_DIR}/testcases.md`;
+export const TESTCASES_RESULT = `${DELIVERABLES_DIR}/testcases-result.md`;
+/** Bản gửi ra ngoài nhóm — qa-reporter xuất bằng thư viện `xlsx` đã có sẵn. */
+export const TESTCASES_XLSX = `${REPORTS_DIR}/testcases-result.xlsx`;
 
 export const UI_CONVENTIONS = `${DELIVERABLES_DIR}/ui-conventions.md`;
 export const UI_ELEMENTS = `${DELIVERABLES_DIR}/ui-elements.json`;
@@ -101,5 +140,30 @@ export const communication = (template) => `${REPORTS_DIR}/communications/${temp
 
 // ── Per-test-case files ──────────────────────────────────────────────
 export const specFor = (tcId) => `${SPEC_DIR}/${tcId}.spec.ts`;
+
+/**
+ * ẢNH THEO TỪNG BƯỚC (R2.2) — một thư mục cho mỗi test case.
+ *
+ * VÌ SAO ĐỔI. Trước đây mỗi test case có đúng HAI ảnh: `-before.jpg` chụp ở trang chủ trước
+ * khi làm gì, và `-after.jpg` chụp trong `afterEach` sau khi test đã kết thúc. Với luồng
+ * "thêm giỏ → mở thanh toán → áp mã → thanh toán → xem đơn hàng" thì:
+ *   before = trang chủ, chưa có gì xảy ra    → không chứng minh được gì
+ *   after  = trang đơn hàng, cách chỗ áp mã hai bước
+ * Trạng thái "áp mã thành công / thất bại" — thứ DUY NHẤT cần nhìn — không có ảnh nào.
+ *
+ * ── `label` LÀ KHOÁ NỐI, KHÔNG PHẢI TÊN CHO ĐẸP ──
+ * Cùng một chuỗi `NN-label` được dùng ở HAI nơi:
+ *   1. tên file ảnh                      →  .qa-run/evidence/<TC>/03-nhap-ma-giam-gia.jpg
+ *   2. tiêu đề `test.step()` trong spec   →  báo cáo JSON của Playwright ghi lại đúng chuỗi đó
+ * Nhờ vậy `qa-verifier` ghép được "bước nào hỏng" (từ test-results.json) với "ảnh nào của
+ * bước đó" mà không cần đoán theo thứ tự. Đổi cách đặt tên ở một nơi là đứt mối nối — sửa
+ * `stepShot` thì phải sửa cả chỗ sinh tiêu đề `test.step` trong gherkin-codegen.js.
+ */
+export const evidenceDir = (tcId) => `${EVIDENCE_DIR}/${tcId}`;
+export const stepShotLabel = (n, label) => `${String(n).padStart(2, "0")}-${label}`;
+export const stepShot = (tcId, n, label) => `${evidenceDir(tcId)}/${stepShotLabel(n, label)}.jpg`;
+
+/** @deprecated Ảnh của bố cục CŨ (hai ảnh mỗi test case). Chỉ còn để ĐỌC ảnh từ lần chạy trước;
+ *  không sinh mới nữa — xem `stepShot` ở trên. */
 export const screenshotBefore = (tcId) => `${EVIDENCE_DIR}/${tcId}-before.jpg`;
 export const screenshotAfter = (tcId) => `${EVIDENCE_DIR}/${tcId}-after.jpg`;
